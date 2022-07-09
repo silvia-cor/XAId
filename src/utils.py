@@ -1,9 +1,7 @@
 import os
-import pickle
 from pathlib import Path
 import pandas as pd
-import numpy as np
-import collections
+import pickle
 
 
 # pickle the output of a function
@@ -20,7 +18,9 @@ def pickled_resource(pickle_path: str, generation_func: callable, *args, **kwarg
             return instance
 
 
-def check_create_output_files(pickle_path, result_path, labels, task):
+# check if the output files exist, and either open them or create the corresponding data structure
+# output: pickle for predictions (dictionary), csv for results (dataframe with metrics)
+def check_create_output_files(pickle_path, result_path, task):
     if os.path.exists(result_path):
         df_csv = pd.read_csv(result_path, sep=';')
         with open(pickle_path, 'rb') as pickle_file:
@@ -34,6 +34,7 @@ def check_create_output_files(pickle_path, result_path, labels, task):
     return df_preds, df_csv
 
 
+# update the output files with the data from the last experiment
 def update_output_files(pickle_path, result_path, df_preds, y_te, y_pred, df_csv, row, learner_name):
     if 'True' not in df_preds:
         df_preds['True'] = y_te
