@@ -24,12 +24,12 @@ For this projects, the creation of textual pairs is of primary importance. The c
 
 For the SAV experiments, we create `n` positive pairs for each author (where a positive pair is made of two texts by the same author) and `m` negative pairs in total (where a negative pair is made of two texts by different authors). In our experiments, `n=1000` and `m=5000` for training, and `n=100` and `m=500` for validation and test. Each pair is labelled as `1` (same author) or `0` (different author).
 
-For the AV and AA experiments, we employ a classifier trained for SAV in order to solve these tasks as well. Thus, we only need to make the respective test set: in order to do so, for each test sample, we create `k` pairs for each author (where a pair is made of the test sample and a text by the author); in our experiments, `k=10`. Each pair is then classified as for SAV, and the test sample is classified as:
+For the AV and AA experiments, we employ a classifier trained for SAV in order to solve these tasks as well. Thus, we only need to make the respective test set. In order to do so, for each test sample:
 
-- for AA: `Ax` (where `Ax` is the author whose pairs have obtained the highest mean proability for the `1` class)
-- for AV: same as for AA, and finally `1` if `Ax` is the author of interest, `0` otherwise. 
+- for AA: we create `k` pairs for each author (where a pair is made of the test sample and a text by the author); each pair is then classified as for SAV, and the test sample is classified as `Ax`, where `Ax` is the author whose pairs have obtained the highest mean proability for the `1` class).
+- for AV: we create `k` pairs for the author of interest (where a pair is made of the test sample and a text by the author); each pair is then classified as for SAV, and the test sample is classified as `1` if the pairs have obtained a mean proability for the `1` class equal or higher than `0.5`, as `0` otherwise.
 
-In case the required number of pairs is less than the total number of pairs that can be created, we always randomly select the required number of pairs.
+In our experiments, `k=10`. In case the required number of pairs is less than the total number of pairs that can be created, we always randomly select the required number of pairs.
 
 NB: for AV, we randomly select one single author as the author of interest.
 

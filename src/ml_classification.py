@@ -18,7 +18,7 @@ if not sys.warnoptions:
     os.environ["PYTHONWARNINGS"] = ('ignore::UserWarning,ignore::ConvergenceWarning,ignore::RuntimeWarning')
 
 
-def ml_experiment(tr_data, val_data, te_data, learner_name, task, model_path, AV_label, unique_labels):
+def ml_experiment(tr_data, val_data, te_data, learner_name, task, model_path, unique_labels):
     """
     Manage the Machine Learning (classic) experiment.
     :param tr_data: training data
@@ -27,7 +27,6 @@ def ml_experiment(tr_data, val_data, te_data, learner_name, task, model_path, AV
     :param learner_name: name of the learning method
     :param task: task to perform
     :param model_path: file path where to save the SAV model
-    :param AV_label: the author if interest for AV task, None for SAV or AA task
     :param unique_labels: list of unique labels
     :return: predictions and targets
     """
@@ -45,15 +44,16 @@ def ml_experiment(tr_data, val_data, te_data, learner_name, task, model_path, AV
     else:
         all_probs = _classification_prob(learner_name, tr_data, val_data, te_data, cls_params)
         y_pred = []
-        for i, single_test_probs in enumerate(all_probs):
-            label_probs = []  # mean probability that the test sample belongs to each label
-            for label in unique_labels:
-                label_probs.append(np.mean(np.array([pair_probs[1] for j, pair_probs in enumerate(single_test_probs)
-                                                     if te_data['pairs_labels'][i][j] == label])))
-            y_pred.append(unique_labels[np.argmax(np.array(label_probs))])
-        # for AV, simply check if the predicted author is the one of interest
-        if AV_label:
-            y_pred = [1 if single_y_pred == AV_label else 0 for single_y_pred in y_pred]
+        if task == 'AV': # for AV, check if the pairs with the author of interest have a mean probability >= 0.5
+            for i, single_test_probs in enumerate(all_probs):
+                y_pred.append(1 if np.mean(np.array([pair_probs[1] for pair_probs in single_test_probs])) >= 0.5 else 0)
+        else:
+            for i, single_test_probs in enumerate(all_probs):
+                label_probs = []  # mean probability that the test sample belongs to each label
+                for label in unique_labels:
+                    label_probs.append(np.mean(np.array([pair_probs[1] for j, pair_probs in enumerate(single_test_probs)
+                                                        if te_data['pairs_labels'][i][j] == label])))
+                y_pred.append(unique_labels[np.argmax(np.array(label_probs))])
     return y_pred, te_data['task_labels']
 
 

@@ -18,7 +18,7 @@ torch.cuda.manual_seed(42)
 np.random.seed(42)
 
 
-def nn_experiment(tr_data, val_data, te_data, task, model_path, AV_label, unique_labels):
+def nn_experiment(tr_data, val_data, te_data, task, model_path, unique_labels):
     """
     Manage the Neural Network experiment.
     :param tr_data: training data
@@ -26,7 +26,6 @@ def nn_experiment(tr_data, val_data, te_data, task, model_path, AV_label, unique
     :param te_data: test data
     :param task: task to perform
     :param model_path: file path where to save the SAV model
-    :param AV_label: the author if interest for AV task, None for SAV or AA task
     :param unique_labels: list of unique labels
     :return: predictions and targets
     """
@@ -39,9 +38,9 @@ def nn_experiment(tr_data, val_data, te_data, task, model_path, AV_label, unique
     if task == 'SAV':
         te_dataloader = SavDataLoader(te_data, tokenizer, batch_size=16)
     else:
-        te_dataloaders = AaAvTestDataLoader(te_data, tokenizer)
+        te_dataloaders = AaAvTestDataLoader(te_data, tokenizer, task)
     print('Test dataloader: Done')
-    model = BertForSequenceClassification.from_pretrained("bert-base-uncased")
+    model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=2)
     model = model.to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
     criterion = nn.CrossEntropyLoss().to(device)
@@ -57,7 +56,7 @@ def nn_experiment(tr_data, val_data, te_data, task, model_path, AV_label, unique
         preds, targets = _evaluate_class(model, te_dataloader, model_path)
         return preds, targets
     else:
-        preds = _evaluate_probs(model, te_dataloaders, model_path, AV_label, unique_labels)
+        preds = _evaluate_probs(model, te_dataloaders, model_path, task, unique_labels)
         return preds, te_data['task_labels']
 
 
@@ -149,27 +148,37 @@ def _evaluate_class(model, dataloader, model_path):
 
 
 # evaluation outputting classes through probabilities (for AA and AV)
-def _evaluate_probs(model, dataloaders, model_path, AV_label, unique_labels):
+def _evaluate_probs(model, dataloaders, model_path, task, unique_labels):
     model.load_state_dict(torch.load(model_path))
     model.eval()
     with torch.no_grad():
         all_probs = []
-        all_pairs_labels = []
-        for dataloader in dataloaders:
-            for token_ids, seg_ids, mask_ids, pairs_labels in dataloader:
-                token_ids = token_ids.to(device)
-                seg_ids = seg_ids.to(device)
-                mask_ids = mask_ids.to(device)
-                all_pairs_labels.append(pairs_labels)
-                all_probs.append(model(token_ids, token_type_ids=seg_ids,
-                                       attention_mask=mask_ids).logits.detach().clone().cpu().numpy())
         preds = []
-        for i, single_test_probs in enumerate(all_probs):
-            label_probs = []  # mean probability that the test sample belongs to each label
-            for label in unique_labels:
-                label_probs.append(np.mean(np.array([pair_probs[1] for j, pair_probs in enumerate(single_test_probs)
-                                                     if all_pairs_labels[i][j] == label])))
-            preds.append(unique_labels[np.argmax(np.array(label_probs))])
-        if AV_label:
-            preds = [1 if single_y_pred == AV_label else 0 for single_y_pred in preds]
+        if task == 'AA':
+            all_pairs_labels = []
+            for dataloader in dataloaders:
+                for token_ids, seg_ids, mask_ids, pairs_labels in dataloader:
+                    token_ids = token_ids.to(device)
+                    seg_ids = seg_ids.to(device)
+                    mask_ids = mask_ids.to(device)
+                    all_pairs_labels.append(pairs_labels)
+                    all_probs.append(model(token_ids, token_type_ids=seg_ids,
+                                           attention_mask=mask_ids).logits.detach().clone().cpu().numpy())
+            for i, single_test_probs in enumerate(all_probs):
+                label_probs = []  # mean probability that the test sample belongs to each label
+                for label in unique_labels:
+                    label_probs.append(np.mean(np.array([pair_probs[1] for j, pair_probs in enumerate(single_test_probs)
+                                                         if all_pairs_labels[i][j] == label])))
+                preds.append(unique_labels[np.argmax(np.array(label_probs))])
+        else:
+            for dataloader in dataloaders:
+                for token_ids, seg_ids, mask_ids, in dataloader:
+                    token_ids = token_ids.to(device)
+                    seg_ids = seg_ids.to(device)
+                    mask_ids = mask_ids.to(device)
+                    all_probs.append(model(token_ids, token_type_ids=seg_ids,
+                                           attention_mask=mask_ids).logits.detach().clone().cpu().numpy())
+            for i, single_test_probs in enumerate(all_probs):
+                # for AV, check if the pairs with the author of interest have a mean probability >= 0.5
+                preds.append(1 if np.mean(np.array([pair_probs[1] for pair_probs in single_test_probs])) >= 0.5 else 0)
     return preds

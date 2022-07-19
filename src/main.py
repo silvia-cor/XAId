@@ -21,8 +21,8 @@ def run_experiment(dataset_name, learner_name, task):
         model_path = f'../models/ML/{dataset_name}_{learner_name}.pickle'
     else:
         model_path = f'../models/NN/{dataset_name}_{learner_name}.pickle'
-    pickle_path = f'../pickles/preds_{dataset_name}_{task}_prova.pickle'
-    result_path = f'../results/res_{dataset_name}_{task}_prova.csv'
+    pickle_path = f'../pickles/preds_{dataset_name}_{task}.pickle'
+    result_path = f'../results/res_{dataset_name}_{task}.csv'
 
     os.makedirs(str(Path(dataset_path).parent), exist_ok=True)
     os.makedirs(str(Path(result_path).parent), exist_ok=True)
@@ -41,10 +41,9 @@ def run_experiment(dataset_name, learner_name, task):
         AV_label = random.sample(unique_labels, 1)[0] if task == 'AV' else None  # select random author for AV
         tr_data, val_data, te_data = make_task_pairs(texts, labels, task, AV_label, unique_labels)
         if learner_name in ['lr', 'svm']:
-            y_pred, y_te = ml_experiment(tr_data, val_data, te_data, learner_name, task, model_path, AV_label,
-                                         unique_labels)
+            y_pred, y_te = ml_experiment(tr_data, val_data, te_data, learner_name, task, model_path, unique_labels)
         else:
-            y_pred, y_te = nn_experiment(tr_data, val_data, te_data, task, model_path, AV_label, unique_labels)
+            y_pred, y_te = nn_experiment(tr_data, val_data, te_data, task, model_path, unique_labels)
         if task == 'AA':
             macro_f1 = np.around(f1_score(y_te, y_pred, average='macro'), decimals=3)
             micro_f1 = np.around(f1_score(y_te, y_pred, average='micro'), decimals=3)

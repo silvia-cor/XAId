@@ -37,9 +37,11 @@ def make_task_pairs(texts, labels, task, AV_label, unique_labels):
     if task == 'SAV':
         te_data = _sav_make_pairs(te_texts, te_labels, unique_labels, limit_pos_perauthor=100, limit_neg_tot=500)
         print('# test pairs:', len(te_data['pairs_texts']))
+    elif task == 'AV':
+        te_data = _av_test_make_pairs(tr_texts, tr_labels, te_texts, te_labels, AV_label, limit_pairs_perauthor=10)
+        print('# test pairs:', sum([len(exp) for exp in te_data['pairs_texts']]))
     else:
-        te_data = _aa_av_test_make_pairs(tr_texts, tr_labels, te_texts, te_labels, AV_label, unique_labels,
-                                         limit_pairs_perauthor=10)
+        te_data = _aa_test_make_pairs(tr_texts, tr_labels, te_texts, te_labels, unique_labels, limit_pairs_perauthor=10)
         print('# test pairs:', sum([len(exp) for exp in te_data['pairs_labels']]))
     return tr_data, val_data, te_data
 
@@ -86,19 +88,17 @@ def _sav_make_pairs(texts, labels, unique_labels, limit_pos_perauthor, limit_neg
     return {'texts': texts, 'task_labels': task_labels, 'pairs_texts': pairs_texts}
 
 
-def _aa_av_test_make_pairs(tr_texts, tr_labels, te_texts, te_labels, AV_label, unique_labels, limit_pairs_perauthor):
+def _aa_test_make_pairs(tr_texts, tr_labels, te_texts, te_labels, unique_labels, limit_pairs_perauthor):
     """
-    Make positive and negative pairs for the test set of AA and AV tasks.
-    Given one text sample, AA and AV is achieved by making limit_pos_perauthor pairs for each author, where a pair is
-    (test_sample, author_x). In AA, we then select the real author for the test sample as the author that obtains
-    the highest mean probabilities in his/her pairs with the test sample; in AV, we check whether the selected author
-    is the author of interest.
+    Make positive and negative pairs for the test set of AA tasks.
+    Given one text sample, make limit_pos_perauthor pairs for each author, where a pair is (test_sample, author_x).
+    We then select the real author for the test sample as the author that obtains the highest mean probabilities in
+    his/her pairs with the test sample.
     Does not require shuffle, since it's the test set.
     :param tr_texts: list of texts from training set
     :param tr_labels: list of labels from training set (the author of each training text)
     :param te_texts: list of texts from test set
     :param te_labels: list of labels from test set (the author of each training text)
-    :param AV_label: the author if interest for AV task, None for AA task
     :param unique_labels: list of unique labels
     :param limit_pairs_perauthor: controls the number of pairs with test sample for each author (0 -> as many as possible)
     :return: dictionary with: 'texts' (list of original test texts),
@@ -111,19 +111,46 @@ def _aa_av_test_make_pairs(tr_texts, tr_labels, te_texts, te_labels, AV_label, u
     for i in range(len(te_labels)):
         pairs = []
         for label in unique_labels:
-            idx_pos_labels = np.where(np.array(tr_labels) == label)[0]  # index of texts by author
-            all_possible_pos_pairs = [(i, idx_pos_label) for idx_pos_label in
-                                      idx_pos_labels]  # all possible pairs with author's texts
-            if limit_pairs_perauthor == 0 or len(all_possible_pos_pairs) < limit_pairs_perauthor:
-                pairs.extend(all_possible_pos_pairs)
-            else:
-                pairs.extend(random.sample(all_possible_pos_pairs, limit_pairs_perauthor))
+            pairs.extend(__make_author_pairs(i, tr_labels, label, limit_pairs_perauthor))
         pairs_texts.append([(te_texts[pair[0]], tr_texts[pair[1]]) for pair in pairs])
         pairs_labels.append([tr_labels[pair[1]] for pair in pairs])
-    if AV_label:
-        te_labels = [1 if te_label == AV_label else 0 for te_label in te_labels]
-    return {'texts': te_texts, 'task_labels': te_labels,
-            'pairs_texts': pairs_texts, 'pairs_labels': pairs_labels}
+    return {'texts': te_texts, 'task_labels': te_labels, 'pairs_texts': pairs_texts, 'pairs_labels': pairs_labels}
+
+
+def _av_test_make_pairs(tr_texts, tr_labels, te_texts, te_labels, AV_label, limit_pairs_perauthor):
+    """
+    Make positive and negative pairs for the test set of AV tasks.
+    Given one text sample, make limit_pos_perauthor pairs for the AV_label author, where a pair is (test_sample, AV_label).
+    Then, in order for the test sample to be classified as by AV_label, the mean probability for the pairs must be higher than 0.5.
+    Does not require shuffle, since it's the test set.
+    :param tr_texts: list of texts from training set
+    :param tr_labels: list of labels from training set (the author of each training text)
+    :param te_texts: list of texts from test set
+    :param te_labels: list of labels from test set (the author of each training text)
+    :param AV_label: the author if interest for AV tasks
+    :param limit_pairs_perauthor: controls the number of pairs with test sample for each author (0 -> as many as possible)
+    :return: dictionary with: 'texts' (list of original test texts),
+    'task_labels' (list of AA/AV labels: multiclass or binary),
+    'pairs_texts' (list of lists of tuple (text1, text2), one list for each test sample),
+    """
+    pairs_texts = []
+    pairs_labels = []
+    for i in range(len(te_labels)):
+        pairs = __make_author_pairs(i, tr_labels, AV_label, limit_pairs_perauthor)
+        pairs_texts.append([(te_texts[pair[0]], tr_texts[pair[1]]) for pair in pairs])
+        pairs_labels.append([tr_labels[pair[1]] for pair in pairs])
+    te_labels = [1 if te_label == AV_label else 0 for te_label in te_labels]  # change labels in binary
+    return {'texts': te_texts, 'task_labels': te_labels, 'pairs_texts': pairs_texts}
+
+
+def __make_author_pairs(i, tr_labels, label, limit_pairs_perauthor):
+    idx_pos_labels = np.where(np.array(tr_labels) == label)[0]  # index of texts by author of interest
+    all_possible_pos_pairs = [(i, idx_pos_label) for idx_pos_label in
+                              idx_pos_labels]  # all possible pairs with author's texts
+    if limit_pairs_perauthor == 0 or len(all_possible_pos_pairs) < limit_pairs_perauthor:
+        return all_possible_pos_pairs
+    else:
+        return random.sample(all_possible_pos_pairs, limit_pairs_perauthor)
 
 
 # --------
@@ -146,7 +173,7 @@ class _SavDataset(Dataset):
 
 
 # class Dataset for AA and AV data
-class _AaAvTestDataset(Dataset):
+class _AaTestDataset(Dataset):
     def __init__(self, input_ids, seg_ids, mask_ids, pairs_labels):
         self.input_ids = input_ids
         self.seg_ids = seg_ids
@@ -154,10 +181,24 @@ class _AaAvTestDataset(Dataset):
         self.pairs_labels = pairs_labels
 
     def __len__(self):
-        return len(self.pairs_labels)
+        return len(self.input_ids)
 
     def __getitem__(self, index):
         return self.input_ids[index], self.seg_ids[index], self.mask_ids[index], self.pairs_labels[index]
+
+
+# class Dataset for AA and AV data
+class _AvTestDataset(Dataset):
+    def __init__(self, input_ids, seg_ids, mask_ids):
+        self.input_ids = input_ids
+        self.seg_ids = seg_ids
+        self.mask_ids = mask_ids
+
+    def __len__(self):
+        return len(self.input_ids)
+
+    def __getitem__(self, index):
+        return self.input_ids[index], self.seg_ids[index], self.mask_ids[index]
 
 
 # create Dataloader for SAV data
@@ -179,7 +220,7 @@ def SavDataLoader(df_data, tokenizer, batch_size):
 
 
 # create n Dataloaders for AA nd AV data, one for each test sample
-def AaAvTestDataLoader(df_data, tokenizer):
+def AaAvTestDataLoader(df_data, tokenizer, task):
     test_dataloaders = []
     for i, test_pairs in enumerate(df_data['pairs_texts']):
         input_ids = []
@@ -193,7 +234,10 @@ def AaAvTestDataLoader(df_data, tokenizer):
         input_ids = pad_sequence(input_ids, batch_first=True)
         seg_ids = pad_sequence(seg_ids, batch_first=True)
         mask_ids = pad_sequence(mask_ids, batch_first=True)
-        dataset = _AaAvTestDataset(input_ids, seg_ids, mask_ids, df_data['pairs_labels'][i])
+        if task == 'AA':
+            dataset = _AaTestDataset(input_ids, seg_ids, mask_ids, df_data['pairs_labels'][i])
+        else:
+            dataset = _AvTestDataset(input_ids, seg_ids, mask_ids)
         test_dataloaders.append(DataLoader(dataset, len(test_pairs), num_workers=5, worker_init_fn=_seed_worker))
     return test_dataloaders
 
@@ -234,7 +278,7 @@ def process_victoria(data_path):
         for row in csv_reader:
             texts.append(row[0])
             labels.append(int(row[1]))
-    selected_authors = random.sample(np.unique(labels).tolist(), 5) # select only n authors (all texts)
+    selected_authors = random.sample(np.unique(labels).tolist(), 5)  # select only n authors (all texts)
     selected_texts = [text for text, label in zip(texts, labels) if label in selected_authors]
     selected_labels = [label for label in labels if label in selected_authors]
     return selected_texts, selected_labels
