@@ -1,58 +1,65 @@
-# eXplainable Authorship Identification
-(to be edited) 
+# Quickstart
+## Installation
+```shell
+mkvirtualenv -p python3.9 xaid
+pip install -r requirements.txt
+cd data/dataset/
+# download Victoria dataset
+wget "https://dataworks.iupui.edu/bitstream/handle/11243/23/Gungor_2018_VictorianAuthorAttribution_data-train.csv"
+cd ../../
+```
 
-## Abstract
-**Authorship Identification (AId)** has three main tasks: 
+## Run
+You can train the model both through command line and python interface.
 
-- **Same-Authorship Verification (SAV)**: (binary) given two documents, do they share the same author?
-- **Authorship Verification (AV)**: (binary) given a document and a candidate author, is the candidate the real author of the document?
-- **Authorship Attribution (AA)**: (multiclass) given a document ans a set of candidate authors, what candidate is the real author of the document?
-
-We offer a method to obtain explanations for the predictions in the SAV task, and, through them, also for the predictions in the AA and SAV tasks. We experiment with both 'classic' Machine Learning methods, employing Support Vector Machine and Logistic Regression, and a BERT-based neural network. Each classifier is trained purely to perform SAV classification, and we solve the AA and AV task by using the predicted probabilities for the author pairs.
-
-
-## The dataset
-The dataset can be selected with the parameter `dataset_name` in `main.py` (however, at the moment we only have one dataset, named "victoria").
-
-We employ the Victorian era dataset (available [here](https://dataworks.iupui.edu/handle/11243/23)). In order to limit the size of the data to process, we randomly select 5 authors and collect all their texts; we divide the resulting dataset into the `trainval` (90%) and `test` (10%) set, and we further divide `trainval` into the `training` (90%) and `validation` (10%) sets, which remain constant for all the experiments. No further pre-processing is done.
-
-
-## The tasks
-The task can be selected with the parameter `task` in `main.py`.
-
-For this projects, the creation of textual pairs is of primary importance. The creation of the pairs for the specific task is controlled by the function `make_task_pairs` in `process_data.py`.
-
-For the SAV experiments, we create `n` positive pairs for each author (where a positive pair is made of two texts by the same author) and `m` negative pairs in total (where a negative pair is made of two texts by different authors). In our experiments, `n=1000` and `m=5000` for training, and `n=100` and `m=500` for validation and test. Each pair is labelled as `1` (same author) or `0` (different author).
-
-For the AV and AA experiments, we employ a classifier trained for SAV in order to solve these tasks as well. Thus, we only need to make the respective test set. In order to do so, for each test sample:
-
-- for AA: we create `k` pairs for each author (where a pair is made of the test sample and a text by the author); each pair is then classified as for SAV, and the test sample is classified as `Ax`, where `Ax` is the author whose pairs have obtained the highest mean proability for the `1` class).
-- for AV: we create `k` pairs for the author of interest (where a pair is made of the test sample and a text by the author); each pair is then classified as for SAV, and the test sample is classified as `1` if the pairs have obtained a mean proability for the `1` class equal or higher than `0.5`, as `0` otherwise.
-
-In our experiments, `k=10`. In case the required number of pairs is less than the total number of pairs that can be created, we always randomly select the required number of pairs.
-
-NB: for AV, we randomly select one single author as the author of interest.
-
-
-## The learning methods
-The learner can be selected with the parameter `learner_name` in `main.py`.
-
-As 'classic' Machine Learning methods, we experiment with both Support Vector Machine (`svm`) and Logistic Regression (`lr`). We fine-tune the hyper-parameters via gridseach on the validation set; the best configuration is then re-trained on the union of the training and validation set. 
-
-We also experiment with a BERT-based neural network (`bert`). We train the model for 5 epochs with evaluation on the validation set at each epoch, and then perform early stopping after 3 epochs without improvement (up to a maximum of 50 epochs). Afterward, we make a final training on the validation set for 5 epochs (without evaluation).
-
-
-### Code 
-The code is organized as follows in the `src` directory:
-
-- `main.py`
-- `ml_classification.py`: code for classification tasks with classic ML algorithms
-- `nn_classification.py`: code for classification tasks with a BERT-based neural network
-- `process_data.py`: functions to process the dataset and create the task pairs
-- `utils.py`: various functions potentially useful for multiple projects 
+**Command Line**
+```shell
+python cli_train.py --dataset victoria\
+                    --algorithm lr\
+                    --task sav\
+                    --nr_authors 3\
+                    --output output_run\
+                    --positive_sampling_size 2500\
+                    --negative_sampling_size 1.0\
+                    --logging_level debug
+                    --n_jobs -1
+```
+where `--dataset` selects the dataset to use,
+`--lr` selects the algorithm to use (in this case Logistic Regression),
+`--task` selects the task (one of Same-Author Verification (sav), Authorship Attribution (aa) or Authorship Verification (av)),
+`--output` is used to name the output files,
+`--positive_sampling_size` and `--negative_sampling_size` are used to regulate the positive/negative sampling per author.
  
- 
+**Python**
+```python
+from train import train
 
-
-### References
-
+model, hyperparameters, validation = train("victoria", "lr", "sav", output="output_run", n_jobs=-1)
+```
+Both runs train the desired model and output several files: one for the trained model (`output.pickle`), one for the model's hyperparameters (`output.model.json`), one for the model's validation (`output.validation.json`), and one for the overall run configuration (`output.json`). 
+For an in-depth review of each parameter run `help(train)`:
+```python
+train(dataset: 'str', algorithm: 'str', task: 'str', nr_authors: 'int' = 10, sampling_size: 'int | float' = 1.0, negative_sampling_size: 'int | float' = 1.0, chr_n_grams: 'int' = 3, hyperparameters: 'Optional[dict]' = None, output: 'Optional[str]' = None, seed: 'int' = 42, n_jobs: 'int' = 1, logging_level: 'str' = 'info') -> 'Tuple[object, dict, dict]'
+    Train a model with the given `algorithm` to perform `task` on the given `dataset`.
+    Args:
+        dataset: The dataset, currently only "victoria" is supported.
+        algorithm: One of "svm", "lr".
+        task: One of "sav" (Same-Author Verification), "av" (Authorship Verification), and "aa" (Authorship Attribution)
+        nr_authors: Number of authors to randomly select. Applies to AA tasks.
+        sampling_size: Number (if integer) or percentage (if float) of positive samples for adaptation to AV tasks.
+                        Defaults to 1.0 (use all samples).
+        negative_sampling_size: Number (if integer) or percentage (if float) of negative samples for adaptation to
+                                AV tasks. If percentage, the percentage is computed according to `sampling_size`.
+                                To use all samples, set to -1. Defaults to 1.0 (use as many negative samples as
+                                positive ones).
+        chr_n_grams: Character n-grams for model training. Defaults to 3.
+        hyperparameters: Hyperparameter distributions for the model selection.
+        output: Output file for configuration. The script generates a `output.cfg` (holding run configuration), a
+                `output.pickle` holding the trained model, and a `output.results.json` holding validation results.
+        seed: Random seed for the experiments. Defaults to 42.
+        n_jobs: Parallelism degree, defaults to 1. Use -1 to use all available resources.
+        logging_level: Logging level, defaults to "info".
+    
+    Returns:
+        A triple (model, optimal hyperparameters, validation dictionary).
+```
