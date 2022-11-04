@@ -6,15 +6,19 @@ import os
 import pickle
 import sys
 import random
+from datetime import datetime
 from typing import Optional, Tuple
 
 import numpy
 import pandas
+import torch
+from transformers import AutoTokenizer, BertModel
 
 from models.linear import LinearSVMTrainer, LogisticRegressorTrainer
 from models.preprocessing import n_grams, preprocess_for_task
+from models.transformer import VictoriaLoader
 from validation import validate
-
+from xai.probing import TransformerProber
 
 __CW = os.path.dirname(os.path.abspath(__file__)) + "/"
 __DATA_FOLDER = __CW + "../data/"
@@ -55,7 +59,7 @@ def train(dataset: str, algorithm: str, task: str,
     """
     if dataset != "victoria":
         raise ValueError(f"Dataset not supported: {dataset}")
-    if algorithm not in ["svm", "lr"]:
+    if algorithm not in ["svm", "lr", "transformer"]:
         raise ValueError(f"Algorithm not supported: {algorithm}")
     if task not in ["sav", "av", "aa"]:
         raise ValueError(f"Task not supported: {task}")
@@ -70,6 +74,9 @@ def train(dataset: str, algorithm: str, task: str,
         logging.basicConfig(level=logging.ERROR)
     if logging_level == "critical":
         logging.basicConfig(level=logging.CRITICAL)
+
+    if output is None:
+        output = str(datetime.now())
 
     if os.path.exists(output + ".cfg"):
         logging.error(f"{output}.cfg already exists, provide another output name.")
@@ -106,22 +113,33 @@ def train(dataset: str, algorithm: str, task: str,
     #########
     # Train #
     #########
-
+    # TODO: adjust with single model
     data = preprocess_for_task(data, task, positive_sampling_size, negative_sampling_size,
                                scale_labels=algorithm in ["lr", "svm"],
                                seed=seed)
     if algorithm == "lr":
         logging.debug(f"Creating {chr_n_grams}-grams.")
-        data, labels = n_grams(data, n_grams=chr_n_grams, task=task)
+        data, labels, _ = n_grams(data, ngrams=chr_n_grams, task=task)
         logging.debug(f"Fitting Logistic Regressor...")
         trainer = LogisticRegressorTrainer(seed, n_jobs)
         model, optimal_hyperparameters = trainer.fit(data, labels, hyperparameters_distributions)
     elif algorithm == "svm":
         logging.debug(f"Creating {chr_n_grams}-grams.")
-        data, labels = n_grams(data, n_grams=chr_n_grams, task=task)
+        data, labels, _ = n_grams(data, ngrams=chr_n_grams, task=task)
         logging.debug(f"Fitting Linear SVM...")
         trainer = LinearSVMTrainer(seed, n_jobs)
         model, optimal_hyperparameters = trainer.fit(data, labels, hyperparameters_distributions)
+    elif algorithm == "transformer":
+        logging.debug(f"Fitting Transformer...")
+        num_labels = numpy.unique(data.label.values).size
+        model = BertModel.from_pretrained("bert-base-uncased", num_labels=num_labels).to("cpu")
+        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        victoria_dataset = VictoriaLoader(data, task, tokenizer, "cuda")
+
+        prober = TransformerProber(model, tokenizer)
+        probing_results = prober.probe(victoria_dataset, probe_type="pos")
+
+
     logging.debug(f"Model fit.")
 
     ############
@@ -145,8 +163,11 @@ def train(dataset: str, algorithm: str, task: str,
     # Dump to disk #
     ################
     logging.info("Dumping info...")
-    with open(output + ".hyperparameters.json", "w") as log:
-        json.dump(optimal_hyperparameters, log)
+    if algorithm != "transformer":
+        with open(output + ".hyperparameters.json", "w") as log:
+            json.dump(optimal_hyperparameters, log)
+    else:
+        torch.save(model.state_dict(), output + ".state_dict.pt")
     with open(output + ".pickle", "wb") as log:
         pickle.dump(model, log)
     with open(output + ".validation.json", "w") as log:

@@ -1,6 +1,6 @@
 import copy
 import itertools
-from typing import Tuple
+from typing import Tuple, Union
 
 import numpy
 import pandas
@@ -29,8 +29,8 @@ def dataset_as_sav(data: pandas.DataFrame, sampling_size: int = -1, negative_sam
     nr_authors = authors.size
     df = list()
     for author in authors:
-        positive_texts = dataset[dataset.author == author].text.values.tolist()
-        negative_texts = dataset[dataset.author != author].text.values.tolist()
+        positive_texts = dataset[dataset.author == author].encoded_texts.values.tolist()
+        negative_texts = dataset[dataset.author != author].encoded_texts.values.tolist()
         # positive samples
         positive_pairs = list(itertools.permutations(positive_texts, 2))
         positive_pairs = positive_pairs[:len(positive_pairs) // 2]
@@ -123,7 +123,7 @@ def dataset_as_av(data: pandas.DataFrame, sampling_size: int = -1, negative_samp
     return df
 
 
-def dataset_as_aa(data: pandas.DataFrame, scale_labels: bool =False, ) -> pandas.DataFrame:
+def dataset_as_aa(data: pandas.DataFrame, scale_labels: bool = False) -> pandas.DataFrame:
     """
     Preprocess the given `data` for a SAV task.
     Args:
@@ -143,7 +143,7 @@ def dataset_as_aa(data: pandas.DataFrame, scale_labels: bool =False, ) -> pandas
     return data
 
 
-def preprocess_for_task(data: pandas.DataFrame, task: str, sampling_size: int = -1, negative_sampling_size: int = -1,
+def preprocess_for_task(data: pandas.DataFrame, task: str, sampling_size: Union[int, float] = 1., negative_sampling_size: Union[int, float] = 1.,
                         scale_labels: bool = False, seed: int = 42) -> pandas.DataFrame:
     """
     Preprocess the given `data` for the given `task`.
@@ -172,18 +172,18 @@ def preprocess_for_task(data: pandas.DataFrame, task: str, sampling_size: int = 
         return dataset_as_aa(data, scale_labels=scale_labels)
 
 
-def n_grams(dataframe: pandas.DataFrame, n_grams: int = 3, task: str = "sav") -> Tuple[numpy.ndarray, numpy.ndarray]:
+def n_grams(dataframe: pandas.DataFrame, ngrams: int = 3, task: str = "sav") -> Tuple[numpy.ndarray, numpy.ndarray, TfidfVectorizer]:
     """
     Extract n-gram features from the given `dataframe`.
     Args:
         dataframe: The dataframe. Texts are assumed to be in a "text_A" column or in a "text_A, text_B" column pair.
-        n_grams: n-grams to consider. Defaults to 3.
+        ngrams: n-grams to consider. Defaults to 3.
         task: Task: one of "sav", "av", or "aa".
     Returns:
-        A pair: a numpy.ndarray encoding n-gram statistics and the appropriate additional info for the task,
-                and the labels.
+        A triple: a numpy.ndarray encoding n-gram statistics and the appropriate additional info for the task,
+                the labels, and the n_gram vectorizer.
     """
-    vectorizer = TfidfVectorizer(analyzer='char', ngram_range=(n_grams, n_grams))
+    vectorizer = TfidfVectorizer(analyzer='char', ngram_range=(ngrams, ngrams))
 
     if task == "sav":
         # array in the form
@@ -206,4 +206,4 @@ def n_grams(dataframe: pandas.DataFrame, n_grams: int = 3, task: str = "sav") ->
         vectorizer.fit(texts)
         data = abs(vectorizer.transform(texts).toarray())
 
-    return data, dataframe.label.values
+    return data, dataframe.label.values, vectorizer

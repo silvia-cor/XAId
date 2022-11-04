@@ -4,7 +4,7 @@ from abc import abstractmethod
 from typing import Tuple
 
 import numpy
-from sklearn.linear_model import LogisticRegression, LinearRegression
+from sklearn.linear_model import LogisticRegression
 
 import ray
 from tune_sklearn import TuneGridSearchCV as SearchAlgorithm
@@ -34,27 +34,25 @@ class LogisticRegressorTrainer(LinearTrainer):
             labels: Training labels.
             hyperparameters: Hyperparameters dictionary for the logistic regressor.
         Returns:
-            A trained Logistic Regressor and its parameters.
+            A trained Logistic Regressor, its parameters, and an evaluation dictionary
         """
         # default search hyperparameters
         multi_class = "multinomial" if numpy.unique(labels).size > 2 else "ovr"
         if len(hyperparameters) == 0:
             hyperparameters["C"] = [0.001, 0.01, 0.1, 1, 10]
             hyperparameters["penalty"] = ["l2"]
-            # hyperparameters["multiclass"] = [multi_class]
 
         search = SearchAlgorithm(LogisticRegression(multi_class=multi_class,
                                                      max_iter=2,
                                                      warm_start=True),
                                  param_grid=hyperparameters,
-                                 cv=2, early_stopping=True,
+                                 cv=5, early_stopping=True,
                                  max_iters=2,
                                  refit=True,
-                                 n_jobs=1)
+                                 n_jobs=self.n_jobs)
         search.fit(data, labels)
 
         regressor = search.best_estimator
-
         configuration = {
             "C": regressor.C,
             "coefficients": regressor.coef_.tolist(),

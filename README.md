@@ -7,6 +7,7 @@ cd data/dataset/
 # download Victoria dataset
 wget "https://dataworks.iupui.edu/bitstream/handle/11243/23/Gungor_2018_VictorianAuthorAttribution_data-train.csv"
 cd ../../
+python -m spacy download en_core_web_sm
 ```
 
 ## Run
