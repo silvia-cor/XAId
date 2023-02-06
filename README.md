@@ -15,7 +15,7 @@ You can train the model both through command line and python interface.
 
 **Command Line**
 ```shell
-python cli_train.py --dataset victoria\
+python cli.py --dataset victoria\
                     --algorithm lr\
                     --task sav\
                     --nr_authors 3\
@@ -32,8 +32,9 @@ where `--dataset` selects the dataset to use,
 `--positive_sampling_size` and `--negative_sampling_size` are used to regulate the positive/negative sampling per author.
  
 **Python**
+
 ```python
-from train import train
+from run import train
 
 model, hyperparameters, validation = train("victoria", "lr", "sav", output="output_run", n_jobs=-1)
 ```

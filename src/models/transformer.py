@@ -22,9 +22,6 @@ class TransformerTrainer:
             num_labels = numpy.unique(data.label.values).size
         else:
             num_labels = 2
-        # TODO: Remove
-        return BertModel.from_pretrained("bert-base-uncased", num_labels=num_labels).to(device)
-        # TODOEND
 
         # Data
         data_loader = VictoriaLoader(data, task, self.tokenizer, device)
@@ -101,6 +98,7 @@ class VictoriaLoader(AuthorshipDataLoader):
                 segmentation = torch.tensor([0] * (length_a + 2) + [1] * (length_b + 1)).to(device)
                 mask = torch.tensor([1] * (length_a + length_b + 3)).to(device)
 
+                # TODO: check if [CLS] and [SEP] is missing
                 self.documents.append(row["text_A"] + " [SEP] " + row["text_B"])
                 self.encoded_texts.append(encoded_pair)
                 self.segmentations.append(segmentation)

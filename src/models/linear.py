@@ -43,11 +43,11 @@ class LogisticRegressorTrainer(LinearTrainer):
             hyperparameters["penalty"] = ["l2"]
 
         search = SearchAlgorithm(LogisticRegression(multi_class=multi_class,
-                                                     max_iter=2,
+                                                     max_iter=10000,
                                                      warm_start=True),
                                  param_grid=hyperparameters,
-                                 cv=5, early_stopping=True,
-                                 max_iters=2,
+                                 cv=5, early_stopping=False,
+                                 max_iters=1000,
                                  refit=True,
                                  n_jobs=self.n_jobs)
         search.fit(data, labels)
@@ -82,7 +82,7 @@ class LinearSVMTrainer(LinearTrainer):
 
         multi_class = "crammer_singer" if numpy.unique(labels).size > 2 else "ovr"
         search = SearchAlgorithm(LinearSVC(multi_class=multi_class,
-                                           max_iter=2),
+                                           max_iter=10000),
                                  param_grid=hyperparameters,
                                  cv=3, max_iters=100000,
                                  n_jobs=self.n_jobs)

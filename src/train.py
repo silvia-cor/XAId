@@ -28,6 +28,7 @@ __OUTPUT_FOLDER = __DATA_FOLDER + "output/"
 
 
 def train(dataset: str, algorithm: str, task: str,
+          selected_author: Optional[int] = None,
           nr_authors: int = 10, positive_sampling_size: int | float = 1., negative_sampling_size: int | float = 1.,
           chr_n_grams: int = 3,
           hyperparameters: Optional[dict] = None,
@@ -86,45 +87,53 @@ def train(dataset: str, algorithm: str, task: str,
         sys.exit(-1)
     hyperparameters_distributions = hyperparameters if hyperparameters is not None else dict()
 
+
+    # set seed
+    random.seed(seed)
+    numpy.random.seed(seed)
+    logging.debug(f"Reading dataset...")
+    data = pandas.read_csv(__DATASET_FOLDER + "Gungor_2018_VictorianAuthorAttribution_data-train.csv",
+                           encoding="latin-1")
+    logging.debug(f"Done")
+    authors = numpy.unique(data.author).squeeze()
+    if selected_author is None:
+        random_authors = numpy.random.choice(authors, nr_authors, replace=False) if nr_authors > 0\
+                                                                                    else list(range(authors.size))
+    else:
+        random_authors = numpy.random.choice(authors, nr_authors - 1, replace=False) if nr_authors > 0\
+                                                                                        else list(range(authors.size))
+        random_authors = random_authors.tolist() + [selected_author]
+    data = data[data["author"].isin(random_authors)]
+
     logging.info("Running...")
     logging.info(f"\tTask: {task}")
     logging.info(f"\tModel: {algorithm}")
     logging.info(f"\tModel file: {output}.pickle")
     logging.info(f"\tValidation file: {output}.validation.json")
     logging.info(f"\tModel parameters: {output}.model.json")
-    logging.info(f"\tNumber of authors selected: {nr_authors}")
+    logging.info(f"\tNumber of authors selected: {len(random_authors)}")
     logging.info(f"\tPositive samples: {positive_sampling_size}")
     logging.info(f"\tNegative samples: {negative_sampling_size}")
     logging.info(f"\tSeed: {seed}")
     logging.info(f"\tParallelism degree: {n_jobs}")
 
-    # set seed
-    random.seed(seed)
-    numpy.random.seed(seed)
-
-    data = pandas.read_csv(__DATASET_FOLDER + "Gungor_2018_VictorianAuthorAttribution_data-train.csv",
-                           encoding="latin-1")
-    authors = numpy.unique(data.author).squeeze()
-    random_authors = numpy.random.choice(authors, nr_authors, replace=False) if nr_authors > 0\
-                                                                                else list(range(authors.size))
-    data = data[data["author"].isin(random_authors)]
-    logging.debug(f"\t\tSelected {nr_authors} authors.")
 
     #########
     # Train #
     #########
     # TODO: adjust with single model
+    logging.debug(f"Preparing for task...")
     data = preprocess_for_task(data, task, positive_sampling_size, negative_sampling_size,
                                scale_labels=algorithm in ["lr", "svm"],
                                seed=seed)
     if algorithm == "lr":
-        logging.debug(f"Creating {chr_n_grams}-grams.")
+        logging.debug(f"Creating {chr_n_grams}-grams on a {data.shape} frame.")
         data, labels, _ = n_grams(data, ngrams=chr_n_grams, task=task)
         logging.debug(f"Fitting Logistic Regressor...")
         trainer = LogisticRegressorTrainer(seed, n_jobs)
         model, optimal_hyperparameters = trainer.fit(data, labels, hyperparameters_distributions)
     elif algorithm == "svm":
-        logging.debug(f"Creating {chr_n_grams}-grams.")
+        logging.debug(f"Creating {chr_n_grams}-grams on a {data.shape} frame.")
         data, labels, _ = n_grams(data, ngrams=chr_n_grams, task=task)
         logging.debug(f"Fitting Linear SVM...")
         trainer = LinearSVMTrainer(seed, n_jobs)
@@ -132,11 +141,12 @@ def train(dataset: str, algorithm: str, task: str,
     elif algorithm == "transformer":
         logging.debug(f"Fitting Transformer...")
         num_labels = numpy.unique(data.label.values).size
-        model = BertModel.from_pretrained("bert-base-uncased", num_labels=num_labels).to("cpu")
+        model = BertModel.from_pretrained("bert-base-uncased", num_labels=num_labels).to("cuda")
         tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-        victoria_dataset = VictoriaLoader(data, task, tokenizer, "cuda")
+        victoria_dataset = VictoriaLoader(data.iloc[:1000], task, tokenizer, "cuda")
 
         prober = TransformerProber(model, tokenizer)
+        logging.debug("Probing...")
         probing_results = prober.probe(victoria_dataset, probe_type="pos")
 
 

@@ -26,7 +26,7 @@ def __convex_hull(points):
 
 def __slope(p, q):
     dx = (q[0] - p[0])
-    return (q[1] - p[1]) / dx
+    return (q[1] - p[1]) / dx if dx != 0 else 0
 
 
 def __find_minmaximizer(hull, point, minimize):
