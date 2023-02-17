@@ -6,13 +6,16 @@ from typing import Tuple, Union
 import numpy
 import pandas
 import spacy
+import itertools
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import LabelEncoder
 from alive_progress import alive_bar
+from collections import Counter
 
 
-def dataset_as_sav(data: pandas.DataFrame, sampling_size: Union[int, float] = -1, negative_sampling_size: Union[int, float] = -1,
-                    seed: int = 42) -> pandas.DataFrame:
+def dataset_as_sav(data: pandas.DataFrame, sampling_size: Union[int, float] = -1,
+                   negative_sampling_size: Union[int, float] = -1,
+                   seed: int = 42) -> pandas.DataFrame:
     """
     Preprocess the given `data` for a SAV task.
     Args:
@@ -50,20 +53,20 @@ def dataset_as_sav(data: pandas.DataFrame, sampling_size: Union[int, float] = -1
             negative_df["author_A"] = author
             negative_df["author_B"] = negative_texts_authors * len(positive_texts)
 
-            nr_positive_samples = sampling_size if isinstance(sampling_size, int)\
-                                                else int(positive_df.shape[0] * sampling_size)
+            nr_positive_samples = sampling_size if isinstance(sampling_size, int) \
+                else int(positive_df.shape[0] * sampling_size)
             nr_positive_samples = positive_df.shape[0] if sampling_size == -1 else nr_positive_samples
-            nr_positive_samples = min(positive_df.shape[0], nr_positive_samples)            
-            nr_negative_samples = negative_sampling_size if isinstance(negative_sampling_size, int)\
-                                                            else int(nr_positive_samples * negative_sampling_size)
+            nr_positive_samples = min(positive_df.shape[0], nr_positive_samples)
+            nr_negative_samples = negative_sampling_size if isinstance(negative_sampling_size, int) \
+                else int(nr_positive_samples * negative_sampling_size)
             nr_negative_samples = negative_df.shape[0] if negative_sampling_size == -1 else nr_negative_samples
             nr_negative_samples = min(negative_df.shape[0], nr_negative_samples)
             nr_negative_samples_per_author = nr_negative_samples // (nr_authors - 1)
 
             positive_author_dataframe = positive_df.sample(nr_positive_samples, random_state=seed)
             negative_author_dataframe = negative_df.groupby(["author_A", "author_B"], group_keys=False).apply(
-                                                                lambda x: x.sample(min(nr_negative_samples_per_author, x.shape[0]),
-                                                                                   random_state=seed))
+                lambda x: x.sample(min(nr_negative_samples_per_author, x.shape[0]),
+                                   random_state=seed))
             positive_author_dataframe["label"] = 1
             negative_author_dataframe["label"] = 0
             author_df = pandas.concat((positive_author_dataframe, negative_author_dataframe))
@@ -101,12 +104,12 @@ def dataset_as_av(data: pandas.DataFrame, sampling_size: int = -1, negative_samp
         positive_df = dataset[dataset.author == author].copy(deep=True)
         negative_df = dataset[dataset.author != author].copy(deep=True)
 
-        nr_positive_samples = sampling_size if isinstance(sampling_size, int)\
-                                            else int(positive_df.shape[0] * sampling_size)
+        nr_positive_samples = sampling_size if isinstance(sampling_size, int) \
+            else int(positive_df.shape[0] * sampling_size)
         nr_positive_samples = positive_df.shape[0] if sampling_size == -1 else nr_positive_samples
         nr_positive_samples = min(positive_df.shape[0], nr_positive_samples)
-        nr_negative_samples = negative_sampling_size if isinstance(negative_sampling_size, int)\
-                                                        else int(positive_df.shape[0] * negative_sampling_size)
+        nr_negative_samples = negative_sampling_size if isinstance(negative_sampling_size, int) \
+            else int(positive_df.shape[0] * negative_sampling_size)
         nr_negative_samples = negative_df.shape[0] if negative_sampling_size == -1 else nr_negative_samples
         nr_negative_samples = min(negative_df.shape[0], nr_negative_samples)
         nr_negative_samples_per_author = nr_negative_samples // nr_authors
@@ -115,8 +118,8 @@ def dataset_as_av(data: pandas.DataFrame, sampling_size: int = -1, negative_samp
         positive_author_dataframe = positive_df.sample(nr_positive_samples, random_state=seed)
         # ... and sample documents from other authors for negative sampling
         negative_author_dataframe = negative_df.groupby("author", group_keys=False).apply(
-                                    lambda x: x.sample(min(nr_negative_samples_per_author, x.shape[0]),
-                                                       random_state=seed))
+            lambda x: x.sample(min(nr_negative_samples_per_author, x.shape[0]),
+                               random_state=seed))
         positive_author_dataframe["label"] = 1
         negative_author_dataframe["label"] = 0
         author_df = pandas.concat((positive_author_dataframe, negative_author_dataframe))
@@ -149,7 +152,8 @@ def dataset_as_aa(data: pandas.DataFrame, scale_labels: bool = False) -> pandas.
     return data
 
 
-def preprocess_for_task(data: pandas.DataFrame, task: str, sampling_size: Union[int, float] = 1., negative_sampling_size: Union[int, float] = 1.,
+def preprocess_for_task(data: pandas.DataFrame, task: str, sampling_size: Union[int, float] = 1.,
+                        negative_sampling_size: Union[int, float] = 1.,
                         scale_labels: bool = False, seed: int = 42) -> pandas.DataFrame:
     """
     Preprocess the given `data` for the given `task`.
@@ -178,7 +182,8 @@ def preprocess_for_task(data: pandas.DataFrame, task: str, sampling_size: Union[
         return dataset_as_aa(data, scale_labels=scale_labels)
 
 
-def n_grams(dataframe: pandas.DataFrame, ngrams: int = 3, task: str = "sav", analyzer: str = "char") -> Tuple[numpy.ndarray, numpy.ndarray, TfidfVectorizer]:
+def n_grams(dataframe: pandas.DataFrame, ngrams: int = 3, task: str = "sav", analyzer: str = "char") -> Tuple[
+    numpy.ndarray, numpy.ndarray, TfidfVectorizer]:
     """
     Extract n-gram features from the given `dataframe`.
     Args:
@@ -190,37 +195,36 @@ def n_grams(dataframe: pandas.DataFrame, ngrams: int = 3, task: str = "sav", ana
         A triple: a numpy.ndarray encoding n-gram statistics and the appropriate additional info for the task,
                 the labels, and the n_gram vectorizer.
     """
-    vectorizer = TfidfVectorizer(analyzer=analyzer, ngram_range=(ngrams, ngrams), max_df=0.5, min_df=0.01)
+    vectorizer = TfidfVectorizer(analyzer=analyzer, ngram_range=(1, ngrams), sublinear_tf=True)
     spacy_analyzer = spacy.load("en_core_web_sm")
 
     if task == "sav":
         # array in the form
-        # difference in n-gram stats
+        # absolute difference in n-gram stats
         texts_A, texts_B = dataframe.text_A.values.tolist(), dataframe.text_B.values.tolist()
         logging.debug(f"\tFitting vectorizer on {len(texts_A + texts_B)} texts...")
         texts = texts_A + texts_B
         if analyzer == "pos":
-            vectorizer = TfidfVectorizer(analyzer="word", ngram_range=(1, 1), max_df=0.5, min_df=0.01)
+            vectorizer = TfidfVectorizer(analyzer="word", ngram_range=(1, 3), sublinear_tf=True)
             pos_A = [[token.pos_ for token in spacy_analyzer(t)] for t in texts_A]
             pos_B = [[token.pos_ for token in spacy_analyzer(t)] for t in texts_B]
             joined_pos_A = [" ".join(p) for p in pos_A]
             joined_pos_B = [" ".join(p) for p in pos_B]
             vectorizer.fit(joined_pos_A + joined_pos_B)
-            vectors_A = vectorizer.transform(pos_A).toarray()
-            vectors_B = vectorizer.transform(pos_B).toarray()
+            vectors_A = vectorizer.transform(joined_pos_A).toarray()
+            vectors_B = vectorizer.transform(joined_pos_B).toarray()
 
         elif analyzer == "word_lengths":
-            vectorizer = TfidfVectorizer(analyzer="word", ngram_range=(1, 1), max_df=0.5, min_df=0.01)
             len_A = [[len(token.text_) for token in spacy_analyzer(t)] for t in texts_A]
             len_B = [[len(token.text_) for token in spacy_analyzer(t)] for t in texts_B]
-            joined_len_A = [" ".join(p) for p in len_A]
-            joined_len_B = [" ".join(p) for p in len_B]
-            vectorizer.fit(joined_len_A + joined_len_B)
-            vectors_A = vectorizer.transform(len_A).toarray()
-            vectors_B = vectorizer.transform(len_B).toarray()
+            flat_len_AB = [item for sublist in (len_A + len_B) for item in sublist]
+            max_len = max([k for k, v in Counter(flat_len_AB).items() if v >= 5])
+            vectors_A = [[(sum(j >= i for j in l)) / len(l) for i in range(1, max_len)] for l in len_A]
+            vectors_B = [[(sum(j >= i for j in l)) / len(l) for i in range(1, max_len)] for l in len_B]
 
         elif analyzer == "word unigram":
-            vectorizer = TfidfVectorizer(analyzer="word", ngram_range=(1, 1), max_df=0.5, min_df=0.01)
+            vectorizer = TfidfVectorizer(analyzer="word", ngram_range=(1, 1), sublinear_tf=True,
+                                         token_pattern='(?u)\\b\\w+\\b')  # for 1-letter words
             words_A = [[token.text_ for token in spacy_analyzer(t)] for t in texts_A]
             words_B = [[token.text_ for token in spacy_analyzer(t)] for t in texts_B]
             joined_words_A = [" ".join(p) for p in words_A]
@@ -230,10 +234,10 @@ def n_grams(dataframe: pandas.DataFrame, ngrams: int = 3, task: str = "sav", ana
             vectors_B = vectorizer.transform(words_B).toarray()
 
         elif analyzer == "char":
-            vectorizer.fit(texts_A + texts_B)            
+            vectorizer.fit(texts_A + texts_B)
             vectors_A, vectors_B = vectorizer.transform(texts_A).toarray(), vectorizer.transform(texts_B).toarray()
-        
-        data = vectors_A - vectors_B
+
+        data = abs(vectors_A - vectors_B)
     elif task == "av":
         logging.debug("\tFitting vectorizer...")
         # array in the form
@@ -241,7 +245,8 @@ def n_grams(dataframe: pandas.DataFrame, ngrams: int = 3, task: str = "sav", ana
         texts = dataframe.text.values.tolist()
         vectorizer.fit(texts)
         logging.debug("\tApplying vectorizer...")
-        data = abs(vectorizer.transform(texts).toarray())
+        # data = abs(vectorizer.transform(texts).toarray())
+        data = vectorizer.transform(texts).toarray()  # why abs?
         data = numpy.hstack((data, dataframe.author.values.reshape(-1, 1)))
     elif task == "aa":
         # array in the form
@@ -250,6 +255,7 @@ def n_grams(dataframe: pandas.DataFrame, ngrams: int = 3, task: str = "sav", ana
         logging.debug("\tFitting vectorizer...")
         vectorizer.fit(texts)
         logging.debug("\tApplying vectorizer...")
-        data = abs(vectorizer.transform(texts).toarray())
+        #data = abs(vectorizer.transform(texts).toarray())
+        data = vectorizer.transform(texts).toarray()
 
     return data, dataframe.label.values, vectorizer

@@ -14,7 +14,7 @@ import pandas
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from sklearn.feature_selection import SelectKBest
-from sklearn.feature_selection import f_classif
+from sklearn.feature_selection import f_classif, chi2
 
 from models.linear import LinearSVMTrainer, LogisticRegressorTrainer
 from models.preprocessing import n_grams, preprocess_for_task
@@ -200,7 +200,7 @@ def train(dataset: str, algorithm: str, task: str, analyzer: str = "char",
     logging.info(f"\tPositive samples: {positive_sampling_size}")
     logging.info(f"\tNegative samples: {negative_sampling_size}")
     logging.info(f"\tSeed: {seed}")
-    logging.info(f"\tParallelism degree: {n_jobs}")
+    logging.info(f"\tParallelism degree: {n_jobs}") # NB: putting -1 rise a Fire error
 
     # set seed
     random.seed(seed)
@@ -226,7 +226,7 @@ def train(dataset: str, algorithm: str, task: str, analyzer: str = "char",
         logging.debug(f"Creating {chr_n_grams}-grams.")
         data, labels, _ = n_grams(data, ngrams=chr_n_grams, task=task, analyzer=analyzer)
         logging.debug(f"Feature selection on n_grams...")
-        data = SelectKBest(f_classif, k=50).fit_transform(data, labels)
+        data = SelectKBest(chi2, k=100).fit_transform(data, labels)
         logging.debug(f"Fitting Logistic Regressor...")
         trainer = LogisticRegressorTrainer(seed, n_jobs)
         model, optimal_hyperparameters = trainer.fit(data, labels, hyperparameters_distributions)
@@ -234,7 +234,7 @@ def train(dataset: str, algorithm: str, task: str, analyzer: str = "char",
         logging.debug(f"Creating {chr_n_grams}-grams.")
         data, labels, _ = n_grams(data, ngrams=chr_n_grams, task=task, analyzer=analyzer)
         logging.debug(f"Feature selection on n_grams...")
-        data = SelectKBest(f_classif, k=50).fit_transform(data, labels)
+        data = SelectKBest(chi2, k=100).fit_transform(data, labels)
         logging.debug(f"Fitting Linear SVM...")
         trainer = LinearSVMTrainer(seed, n_jobs)
         model, optimal_hyperparameters = trainer.fit(data, labels, hyperparameters_distributions)
