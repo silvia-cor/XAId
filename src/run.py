@@ -224,20 +224,25 @@ def train(dataset: str, algorithm: str, task: str, analyzer: str = "char",
                                seed=seed)
     if algorithm == "lr":
         logging.debug(f"Creating {chr_n_grams}-grams.")
-        data, labels, _ = n_grams(data, ngrams=chr_n_grams, task=task, analyzer=analyzer)
+        data, labels, vectorizer = n_grams(data, ngrams=chr_n_grams, task=task, analyzer=analyzer)
         logging.debug(f"Feature selection on n_grams...")
-        data = SelectKBest(chi2, k=100).fit_transform(data, labels)
+        selector = SelectKBest(chi2, k=100).fit(data, labels)
+        data = selector.transform(data)
+        features_names = selector.get_feature_names_out(vectorizer.get_feature_names_out()).tolist()
         logging.debug(f"Fitting Logistic Regressor...")
         trainer = LogisticRegressorTrainer(seed, n_jobs)
         model, optimal_hyperparameters = trainer.fit(data, labels, hyperparameters_distributions)
     elif algorithm == "svm":
         logging.debug(f"Creating {chr_n_grams}-grams.")
-        data, labels, _ = n_grams(data, ngrams=chr_n_grams, task=task, analyzer=analyzer)
+        data, labels, vectorizer = n_grams(data, ngrams=chr_n_grams, task=task, analyzer=analyzer)
         logging.debug(f"Feature selection on n_grams...")
-        data = SelectKBest(chi2, k=100).fit_transform(data, labels)
+        selector = SelectKBest(chi2, k=100).fit(data, labels)
+        data = selector.transform(data)
+        features_names = selector.get_feature_names_out(vectorizer.get_feature_names_out()).tolist()
         logging.debug(f"Fitting Linear SVM...")
         trainer = LinearSVMTrainer(seed, n_jobs)
         model, optimal_hyperparameters = trainer.fit(data, labels, hyperparameters_distributions)
+
     elif algorithm == "transformer":
         logging.debug(f"Fitting Transformer...")
         trainer = TransformerTrainer()
@@ -271,6 +276,8 @@ def train(dataset: str, algorithm: str, task: str, analyzer: str = "char",
     if algorithm != "transformer":
         with open(output + ".hyperparameters.json", "w") as log:
             json.dump(optimal_hyperparameters, log)
+        with open(output + ".features_names.json", "w") as log:
+            json.dump(features_names, log)
     else:
         torch.save(model.state_dict(), output + ".state_dict.pt")
     with open(output + ".pickle", "wb") as log:
