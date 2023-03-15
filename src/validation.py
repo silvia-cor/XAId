@@ -2,7 +2,7 @@ import numpy
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
 
-def validate(model, data: numpy.ndarray, labels: numpy.ndarray) -> dict:
+def validate(model, test_data, test_labels, algorithm, task):
     """
     Validate the given `model` against the given `data`.
     Args:
@@ -13,28 +13,33 @@ def validate(model, data: numpy.ndarray, labels: numpy.ndarray) -> dict:
     Returns:
         A dictionary holding several validation metrics.
     """
-    binary_task = True if numpy.unique(labels).size == 2 else False
-    predicted_labels = model.predict(data)
 
-    accuracy = accuracy_score(labels, predicted_labels)
+    binary_task = True if numpy.unique(test_labels).size == 2 else False
+
+    if algorithm == 'transformer':
+        predicted_labels = model.predict(test_data, task)
+    else:
+        predicted_labels = model.predict(test_data)
+
+    accuracy = accuracy_score(test_labels, predicted_labels)
     if binary_task:
-        f1 = f1_score(labels, predicted_labels)
-        precision = precision_score(labels, predicted_labels)
-        recall = recall_score(labels, predicted_labels)
+        f1 = f1_score(test_labels, predicted_labels)
+        precision = precision_score(test_labels, predicted_labels)
+        recall = recall_score(test_labels, predicted_labels)
 
         validation = {
             "accuracy": accuracy,
-            "f1_micro": f1,
+            "f1": f1,
             "precision": precision,
             "recall": recall,
         }
     else:
-        f1_micro = f1_score(labels, predicted_labels, average="micro")
-        f1_macro = f1_score(labels, predicted_labels, average="macro")
-        precision_micro = precision_score(labels, predicted_labels, average="micro")
-        precision_macro = precision_score(labels, predicted_labels, average="macro")
-        recall_micro = recall_score(labels, predicted_labels, average="micro")
-        recall_macro = recall_score(labels, predicted_labels, average="macro")
+        f1_micro = f1_score(test_labels, predicted_labels, average="micro")
+        f1_macro = f1_score(test_labels, predicted_labels, average="macro")
+        precision_micro = precision_score(test_labels, predicted_labels, average="micro")
+        precision_macro = precision_score(test_labels, predicted_labels, average="macro")
+        recall_micro = recall_score(test_labels, predicted_labels, average="micro")
+        recall_macro = recall_score(test_labels, predicted_labels, average="macro")
 
         validation = {
             "accuracy": accuracy,
