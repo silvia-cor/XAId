@@ -123,19 +123,18 @@ def counter_factual_examples(model, train_df, test_df, test_data, test_labels, a
 
     if algorithm != 'transformer':
         pred = model.predict([test_data[test_sample_index]])
-        logging.info("Extracting features...")
-        train_data, _, _ = n_grams(train_df, kwargs['char_n_grams'], task, kwargs['analyzer'],
-                                   kwargs['vectorizer'], kwargs['max_len'])
+        logging.info("\tExtracting features...")
+        train_data, _, _ = n_grams(train_df, kwargs['char_n_grams'], task, kwargs['vectorizer'], kwargs['max_len'])
         train_data = kwargs['selector'].transform(train_data)
         test_data = test_data[test_sample_index]
     else:
         pred = model.predict(test_data.iloc[[test_sample_index]], task)
-        logging.info("Encoding the data...")
+        logging.info("\tEncoding the data...")
         train_data = model.encode(train_df, task)
         test_data = model.encode(test_data.iloc[[test_sample_index]], task)[0]
-    logging.info("Getting factuals...")
+    logging.info("\tGetting factuals...")
     factual_indices = numpy.argwhere(train_labels == pred).squeeze()
-    logging.info("Getting counter-factuals...")
+    logging.info("\tGetting counter-factuals...")
     counterfactual_indices = numpy.argwhere(train_labels != pred).squeeze()
     factual_candidates = [train_data[factual_index] for factual_index in factual_indices]
     counterfactual_candidates = [train_data[counterfactual_index] for counterfactual_index in counterfactual_indices]

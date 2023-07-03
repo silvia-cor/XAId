@@ -6,20 +6,20 @@ import numpy
 import pandas
 import random
 import torch.cuda
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, BertModel
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, RobertaConfig
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence
 
-# for reproducibility
-torch.backends.cudnn.deterministic = True
-random.seed(42)
-torch.manual_seed(42)
-torch.cuda.manual_seed(42)
-numpy.random.seed(42)
-
 
 class Transformer:
-    def __init__(self, model: str = "khosseini/bert_1760_1900", state_dict=None, num_labels=2):
+    def __init__(self, model: str = "pstroe/roberta-base-latin-cased3", state_dict=None, num_labels=2, seed=42):
+        # for reproducibility
+        torch.backends.cudnn.deterministic = True
+        random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        numpy.random.seed(seed)
+
         self.tokenizer = AutoTokenizer.from_pretrained(model)
         self.batch_size = 16
         self.device = 'cuda' if torch.cuda.is_available() else "cpu"
@@ -33,7 +33,7 @@ class Transformer:
 
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-5)
         criterion = torch.nn.CrossEntropyLoss().to(self.device)
-        epochs = hyperparameters.get("epochs", 10)
+        epochs = hyperparameters.get("epochs", 5)
 
         for epoch in range(epochs):
             epoch_loss = []
@@ -118,8 +118,8 @@ class AuthorshipDataloader:
         inputs, segs, masks = list(), list(), list()
         if self.task == "sav":
             for pair in documents:
-                encoded_a = self.tokenizer.encode(pair[0], max_length=254, truncation=True, add_special_tokens=False)
-                encoded_b = self.tokenizer.encode(pair[1], max_length=254, truncation=True, add_special_tokens=False)
+                encoded_a = self.tokenizer.encode(pair[0], max_length=250, truncation=True, add_special_tokens=False)
+                encoded_b = self.tokenizer.encode(pair[1], max_length=250, truncation=True, add_special_tokens=False)
                 encoded_pair = torch.tensor([self.tokenizer.cls_token_id] + encoded_a + [self.tokenizer.sep_token_id]
                                             + encoded_b + [self.tokenizer.sep_token_id])
                 length_a = len(encoded_a)
@@ -131,7 +131,7 @@ class AuthorshipDataloader:
                 masks.append(mask)
         else:
             for text in documents:
-                encoded_text = self.tokenizer.encode(text, max_length=510, truncation=True, add_special_tokens=False)
+                encoded_text = self.tokenizer.encode(text, max_length=500, truncation=True, add_special_tokens=False)
                 encoded_text = torch.tensor(
                     [self.tokenizer.cls_token_id] + encoded_text + [self.tokenizer.sep_token_id])
                 length = len(encoded_text)

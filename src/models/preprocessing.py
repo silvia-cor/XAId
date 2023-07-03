@@ -1,17 +1,91 @@
 import copy
 import logging
 from typing import Tuple, Union
+import os
 
 import numpy
 import pandas
-import spacy
-import itertools
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from alive_progress import alive_bar
-from collections import Counter
-import random
+import re
+import itertools
+from helpers import splitter
+
+
+def create_MedLatin(data_path, n_sent=10, cleaning=True):
+    """
+    :param data_path: path to the dataset directory, default: "../dataset/MedLatin"
+    :param n_sent: number of sentences forming a fragment, default: 10
+    :param cleaning: trigger the custom cleaning of the texts, default: True
+    """
+    if not os.path.exists(data_path):
+        print('Dataset not found!')
+        exit(0)
+    data = []
+    authors_labels = []
+    titles_labels = []
+    subs = []
+    for d in os.listdir(data_path):
+        dir_path = data_path + '/' + d
+        for i, file in enumerate(os.listdir(dir_path)):
+            file_path = dir_path + '/' + file
+            text = open(file_path, "r", errors='ignore').read()
+            author, title = file.split('_', 1)  # get author index by splitting the file name
+            if author in ['Dante', 'GiovanniBoccaccio', 'PierDellaVigna', 'BenvenutoDaImola', 'PietroAlighieri']:
+                if cleaning:  # if cleaning is requested, the files are cleaned
+                    text = _clean_texts(text)
+                fragments = splitter(text, n_sent)
+                data.extend(fragments)
+                # add corresponding title label, one for each fragment
+                titles_labels.extend([i] * len(fragments))
+                # add corresponding author labels, one for each fragment
+                authors_labels.extend([author] * len(fragments))
+                subs.extend(['epi'] * len(fragments) if d == 'MedLatinEpi' else ['lit'] * len(fragments))
+    data = pandas.DataFrame({'text': data, 'author': authors_labels, 'title': titles_labels,
+                             'sub_corpus': subs})
+    logging.info(f"\tauthors: {numpy.unique(numpy.array(authors_labels))}")
+    logging.info(f"\t#texts: {len(data)}")
+    return data
+
+
+def _clean_texts(text):
+    #text = text.lower()
+    text = text.replace('v', 'u')
+    text = text.replace('j', 'i')
+    text = re.sub("\n+", " ", text)
+    text = re.sub("\s+", " ", text)
+    text = re.sub('\*.*?\*', "", text)
+    text = re.sub('\{.*?\}', "", text)
+    text = re.sub('[0-9]', "", text)
+    text = re.sub("\n+", " ", text)
+    text = re.sub("\s+", " ", text)
+    text = re.sub('\.\s+(?=\.)|\.\.+', "", text)
+    text = re.sub("\n+", " ", text)
+    text = re.sub("\s+", " ", text)
+    text = re.sub("\(|\)|\[|\]", "", text)
+    text = re.sub("\—|\–|\-|\_", "", text)
+    text = re.sub("\‹|\›|\»|\«|\=|\/|\\|\~|\§|\*|\#|\@|\^|\“|\”|\‘|\’|\°", "", text)
+    text = re.sub("\&dagger;|\&amacr;|\&emacr;|\&imacr;|\&omacr;|\&umacr;|\&lsquo;|\&rsquo;|\&rang;|\&lang;|\&lsqb;",
+                  "", text)
+    text = re.sub("\?|\!|\:|\;", ".", text)
+    text = text.replace("'", "")
+    text = text.replace('"', '')
+    text = text.replace(".,", ".")
+    text = text.replace(",.", ".")
+    text = text.replace(" .", ".")
+    text = text.replace(" ,", ",")
+    text = re.sub('(\.)+', ".", text)
+    text = re.sub('(\,)+', "", text)
+    text = text.replace("á", "a")
+    text = text.replace("é", "e")
+    text = text.replace("í", "i")
+    text = text.replace("ó", "o")
+    text = text.replace("ç", "")
+    text = re.sub("\n+", " ", text)
+    text = re.sub("\s+", " ", text)
+    return text
 
 
 def dataset_as_sav(data: pandas.DataFrame, sampling_size: Union[int, float] = -1,
@@ -72,9 +146,7 @@ def dataset_as_sav(data: pandas.DataFrame, sampling_size: Union[int, float] = -1
             negative_author_dataframe["label"] = 0
             author_df = pandas.concat((positive_author_dataframe, negative_author_dataframe))
             df.append(author_df)
-
             bar()
-
     df = pandas.concat(df, axis="rows")
     df = df[["text_A", "text_B", "author_A", "author_B", "label"]].reset_index()
 
@@ -92,13 +164,10 @@ def dataset_as_av(data: pandas.DataFrame, author) -> pandas.DataFrame:
                                 AV tasks. If percentage, the percentage is computed according to `sampling_size`.
                                 To use all samples, set to -1. Defaults to 1.0 (use as many negative samples as
                                 positive ones).
-        seed: Sampling seed. Defaults to 42.
-
     Returns:
     """
-    data.columns = ["text", "label"]
-    labels = data.label.values
-    data.label = [1 if label == author else 0 for label in labels]
+    labels = data.author.values
+    data['label'] = [1 if label == author else 0 for label in labels]
     return data
 
 
@@ -111,22 +180,19 @@ def dataset_as_aa(data: pandas.DataFrame, label_encoder=None):
                         Defaults to False.
 
     """
-    data.columns = ["text", "label"]
     # scale labels
     if label_encoder is None:
-        labels = data.label.values
-        # scaled_labels = (labels - labels.min()) / (labels.max() - labels.min())
+        labels = data.author.values
         label_encoder = LabelEncoder()
-        data.label = label_encoder.fit_transform(labels)
+        data['label'] = label_encoder.fit_transform(labels)
         return data, label_encoder
     else:
-        data.label = label_encoder.transform(data.label.values)
+        data['label'] = label_encoder.transform(data.author.values)
         return data
 
 
 def preprocess_for_task(data: pandas.DataFrame, task: str, sampling_size: Union[int, float] = 1.,
-                        negative_sampling_size: Union[int, float] = 1.,
-                        scale_labels=None, seed: int = 42):
+                        negative_sampling_size: Union[int, float] = 1., seed: int = 42):
     """
     Preprocess the given `data` for the given `task`.
     Args:
@@ -138,8 +204,6 @@ def preprocess_for_task(data: pandas.DataFrame, task: str, sampling_size: Union[
                                 AV tasks. If percentage, the percentage is computed according to `sampling_size`.
                                 To use all samples, set to -1. Defaults to 1.0 (use as many negative samples as
                                 positive ones).
-        scale_labels: Some models only produce outputs in [0, 1], if `labels_scale` is True, scale the labels to [0, 1].
-                        Defaults to False.
         seed: Sampling seed. Defaults to 42.
 
     Returns:
@@ -150,11 +214,10 @@ def preprocess_for_task(data: pandas.DataFrame, task: str, sampling_size: Union[
 
     if task == "sav":
         train_df = dataset_as_sav(train_df, sampling_size, negative_sampling_size, seed)
-        test_df = dataset_as_sav(test_df, int(sampling_size/10), negative_sampling_size, seed)
+        test_df = dataset_as_sav(test_df, int(sampling_size / 10), negative_sampling_size, seed)
         return train_df.reset_index(), test_df.reset_index()
     elif task == "av":
-        random.seed(seed)
-        author = random.choice(numpy.unique(data.author))
+        author = 'Dante'  # author for AV is Dante
         logging.debug(f'\tSelecting AV author: {author}')
         train_df = dataset_as_av(train_df, author)
         test_df = dataset_as_av(test_df, author)
@@ -166,86 +229,39 @@ def preprocess_for_task(data: pandas.DataFrame, task: str, sampling_size: Union[
         return train_df.reset_index(), test_df.reset_index(), label_encoder
 
 
-def n_grams(dataframe: pandas.DataFrame, ngrams: int = 3, task: str = "sav", analyzer: str = "char",
-            vectorizer = None, max_len = None):
+def n_grams(dataframe: pandas.DataFrame, ngrams: int = 3, task: str = "sav", vectorizer=None, max_len=None):
     """
     Extract n-gram features from the given `dataframe`.
     Args:
         dataframe: The dataframe. Texts are assumed to be in a "text_A" column or in a "text_A, text_B" column pair.
         ngrams: n-grams to consider. Defaults to 3.
         task: Task: one of "sav", "av", or "aa".
-        analyzer: The features to use to train the linear model (algorithm in ["lr", "svm"]). One of "char", "pos",
     Returns:
         A triple: a numpy.ndarray encoding n-gram statistics and the appropriate additional info for the task,
                 the labels, and the n_gram vectorizer.
     """
-    assert not (analyzer != 'char' and task != 'sav'), "For AV and AA tasks, only char analyzer is available."
-    spacy_analyzer = spacy.load("en_core_web_sm")
-
     if task == "sav":
         # array in the form
         # absolute difference in n-gram stats
         texts_A, texts_B = dataframe.text_A.values.tolist(), dataframe.text_B.values.tolist()
-        if analyzer == "pos":
-            pos_A = [[token.pos_ for token in spacy_analyzer(t)] for t in texts_A]
-            pos_B = [[token.pos_ for token in spacy_analyzer(t)] for t in texts_B]
-            joined_pos_A = [" ".join(p) for p in pos_A]
-            joined_pos_B = [" ".join(p) for p in pos_B]
-            if vectorizer is None:
-                logging.debug(f"\tFitting vectorizer on {len(texts_A + texts_B)} texts...")
-                vectorizer = TfidfVectorizer(analyzer="word", ngram_range=(1, 3), sublinear_tf=True)
-                vectorizer.fit(joined_pos_A + joined_pos_B)
-            vectors_A = vectorizer.transform(joined_pos_A).toarray()
-            vectors_B = vectorizer.transform(joined_pos_B).toarray()
-
-        elif analyzer == "word_lengths":
-            len_A = [[len(token.text_) for token in spacy_analyzer(t)] for t in texts_A]
-            len_B = [[len(token.text_) for token in spacy_analyzer(t)] for t in texts_B]
-            flat_len_AB = [item for sublist in (len_A + len_B) for item in sublist]
-            if max_len is None:
-                max_len = max([k for k, v in Counter(flat_len_AB).items() if v >= 5])
-            vectors_A = [[(sum(j >= i for j in l)) / len(l) for i in range(1, max_len)] for l in len_A]
-            vectors_B = [[(sum(j >= i for j in l)) / len(l) for i in range(1, max_len)] for l in len_B]
-
-        elif analyzer == "word unigram":
-            words_A = [[token.text_ for token in spacy_analyzer(t)] for t in texts_A]
-            words_B = [[token.text_ for token in spacy_analyzer(t)] for t in texts_B]
-            joined_words_A = [" ".join(p) for p in words_A]
-            joined_words_B = [" ".join(p) for p in words_B]
-            if vectorizer is None:
-                vectorizer = TfidfVectorizer(analyzer="word", ngram_range=(1, 1), sublinear_tf=True,
-                                            token_pattern='(?u)\\b\\w+\\b')  # for 1-letter words
-                vectorizer.fit(joined_words_A + joined_words_B)
-            vectors_A = vectorizer.transform(words_A).toarray()
-            vectors_B = vectorizer.transform(words_B).toarray()
-
-        elif analyzer == "char":
-            if vectorizer is None:
-                vectorizer = TfidfVectorizer(analyzer=analyzer, ngram_range=(2, ngrams), sublinear_tf=True)
-                vectorizer.fit(texts_A + texts_B)
-            vectors_A, vectors_B = vectorizer.transform(texts_A).toarray(), vectorizer.transform(texts_B).toarray()
+        if vectorizer is None:
+            logging.debug("\t\tFitting vectorizer...")
+            vectorizer = TfidfVectorizer(analyzer='char', ngram_range=(2, ngrams), sublinear_tf=True)
+            vectorizer.fit(texts_A + texts_B)
+        logging.debug("\t\tApplying vectorizer...")
+        vectors_A, vectors_B = vectorizer.transform(texts_A).toarray(), vectorizer.transform(texts_B).toarray()
         data = abs(vectors_A - vectors_B)
-
-    # elif task == "av":
-    #     logging.debug("\tFitting vectorizer...")
-    #     # array in the form
-    #     # n-gram stats, guessed author
-    #     texts = dataframe.text.values.tolist()
-    #     vectorizer.fit(texts)
-    #     logging.debug("\tApplying vectorizer...")
-    #     # data = abs(vectorizer.transform(texts).toarray())
-    #     data = vectorizer.transform(texts).toarray()  # why abs?
-    #     # data = numpy.hstack((data, dataframe.author.values.reshape(-1, 1)))
     else:
         # array in the form
         # n-gram stats
         texts = dataframe.text.values.tolist()
         if vectorizer is None:
-            logging.debug("\tFitting vectorizer...")
-            vectorizer = TfidfVectorizer(analyzer=analyzer, ngram_range=(1, ngrams), sublinear_tf=True)
+            logging.debug("\t\tFitting vectorizer...")
+            vectorizer = TfidfVectorizer(analyzer='char', ngram_range=(2, ngrams), sublinear_tf=True)
             vectorizer.fit(texts)
-        logging.debug("\tApplying vectorizer...")
-        # data = abs(vectorizer.transform(texts).toarray())
+        logging.debug("\t\tApplying vectorizer...")
         data = vectorizer.transform(texts).toarray()
-
     return data, vectorizer, max_len
+
+
+

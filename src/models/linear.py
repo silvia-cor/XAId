@@ -39,17 +39,18 @@ class LogisticRegressorTrainer(LinearTrainer):
         # default search hyperparameters
         multi_class = "multinomial" if numpy.unique(labels).size > 2 else "ovr"
         if len(hyperparameters) == 0:
-            hyperparameters["C"] = [0.001, 0.01, 0.1, 1, 10]
-            hyperparameters["penalty"] = ["l2"]
+            hyperparameters = {
+                "C": [0.001, 0.01, 0.1, 1, 10, 100, 1000],
+                "penalty": ["l2"],
+                'random_state': [self.seed]
+            }
 
         search = SearchAlgorithm(LogisticRegression(multi_class=multi_class,
-                                                     max_iter=10000,
-                                                     warm_start=True),
+                                                    max_iter=100000,
+                                                    warm_start=True),
                                  param_grid=hyperparameters,
-                                 cv=5, early_stopping=False,
-                                 max_iters=1000,
-                                 refit=True,
-                                 n_jobs=self.n_jobs)
+                                 cv=3, early_stopping=False,
+                                 refit=True, n_jobs=self.n_jobs)
         search.fit(data, labels)
 
         regressor = search.best_estimator
@@ -78,14 +79,16 @@ class LinearSVMTrainer(LinearTrainer):
         """
         # default search hyperparameters
         if len(hyperparameters) == 0:
-            hyperparameters["C"] = [0.001, 0.01, 0.1, 1, 10]
+            hyperparameters = {
+                "C": [0.001, 0.01, 0.1, 1, 10, 100, 1000],
+                "random_state": [self.seed]
+            }
 
         multi_class = "crammer_singer" if numpy.unique(labels).size > 2 else "ovr"
         search = SearchAlgorithm(LinearSVC(multi_class=multi_class,
-                                           max_iter=10000),
+                                           max_iter=100000),
                                  param_grid=hyperparameters,
-                                 cv=3, max_iters=100000,
-                                 n_jobs=self.n_jobs)
+                                 cv=3, refit=True, n_jobs=self.n_jobs)
         search.fit(data, labels)
 
         svm = search.best_estimator
