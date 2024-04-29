@@ -1,6 +1,6 @@
 import copy
 import logging
-from typing import Tuple, Union
+from typing import Union
 import os
 
 import numpy
@@ -29,7 +29,7 @@ def create_MedLatin(data_path, n_sent=10, cleaning=True):
     subs = []
     for d in os.listdir(data_path):
         dir_path = data_path + '/' + d
-        for i, file in enumerate(os.listdir(dir_path)):
+        for file in os.listdir(dir_path):
             file_path = dir_path + '/' + file
             text = open(file_path, "r", errors='ignore').read()
             author, title = file.split('_', 1)  # get author index by splitting the file name
@@ -39,7 +39,7 @@ def create_MedLatin(data_path, n_sent=10, cleaning=True):
                 fragments = splitter(text, n_sent)
                 data.extend(fragments)
                 # add corresponding title label, one for each fragment
-                titles_labels.extend([i] * len(fragments))
+                titles_labels.extend([title] * len(fragments))
                 # add corresponding author labels, one for each fragment
                 authors_labels.extend([author] * len(fragments))
                 subs.extend(['epi'] * len(fragments) if d == 'MedLatinEpi' else ['lit'] * len(fragments))
@@ -51,7 +51,7 @@ def create_MedLatin(data_path, n_sent=10, cleaning=True):
 
 
 def _clean_texts(text):
-    #text = text.lower()
+    # text = text.lower()
     text = text.replace('v', 'u')
     text = text.replace('j', 'i')
     text = re.sub("\n+", " ", text)
@@ -88,22 +88,22 @@ def _clean_texts(text):
     return text
 
 
-def dataset_as_sav(data: pandas.DataFrame, sampling_size: Union[int, float] = -1,
-                   negative_sampling_size: Union[int, float] = -1,
+def dataset_as_sav(data: pandas.DataFrame, sampling_size: Union[int, float] = 1.,
+                   negative_sampling_size: Union[int, float] = 1.,
                    seed: int = 42) -> pandas.DataFrame:
     """
-    Preprocess the given `data` for a SAV task.
+    Preprocess the given `data` for SAV task.
     Args:
-        data: The dataset to preprocess.
-        sampling_size: Number (if integer) or percentage (if float) of positive samples for adaptation to AV tasks.
+        :param data: The dataset to preprocess.
+        :param sampling_size: Number (if integer) or percentage (if float) of positive samples for adaptation to AV tasks.
                         Defaults to 1.0 (use all samples).
-        negative_sampling_size: Number (if integer) or percentage (if float) of negative samples for adaptation to
+        :param negative_sampling_size: Number (if integer) or percentage (if float) of negative samples for adaptation to
                                 AV tasks. If percentage, the percentage is computed according to `sampling_size`.
                                 To use all samples, set to -1. Defaults to 1.0 (use as many negative samples as
                                 positive ones).
-        seed: Sampling seed. Defaults to 42.
-
+        :param seed: Sampling seed. Defaults to 42.
     Returns:
+        dataframe for the SAV task.
     """
     dataset = copy.deepcopy(data)
     authors = numpy.unique(dataset.author)
@@ -149,36 +149,31 @@ def dataset_as_sav(data: pandas.DataFrame, sampling_size: Union[int, float] = -1
             bar()
     df = pandas.concat(df, axis="rows")
     df = df[["text_A", "text_B", "author_A", "author_B", "label"]].reset_index()
-
     return df
 
 
-def dataset_as_av(data: pandas.DataFrame, author) -> pandas.DataFrame:
+def dataset_as_av(data: pandas.DataFrame, author: str) -> pandas.DataFrame:
     """
-    Preprocess the given `data` for a SAV task.
+    Preprocess the given `data` for AV task.
     Args:
-        data: The dataset to preprocess.
-        sampling_size: Number (if integer) or percentage (if float) of positive samples for adaptation to AV tasks.
-                        Defaults to 1.0 (use all samples).
-        negative_sampling_size: Number (if integer) or percentage (if float) of negative samples for adaptation to
-                                AV tasks. If percentage, the percentage is computed according to `sampling_size`.
-                                To use all samples, set to -1. Defaults to 1.0 (use as many negative samples as
-                                positive ones).
+        :param data: The dataset to preprocess.
+        :param author: The author of interest.
     Returns:
+        dataframe for the AV task.
     """
     labels = data.author.values
     data['label'] = [1 if label == author else 0 for label in labels]
     return data
 
 
-def dataset_as_aa(data: pandas.DataFrame, label_encoder=None):
+def dataset_as_aa(data: pandas.DataFrame, label_encoder: LabelEncoder = None):
     """
-    Preprocess the given `data` for a SAV task.
+    Preprocess the given `data` for AA task.
     Args:
-        data: The dataset to preprocess.
-        scale_labels: Some models only produce outputs in [0, 1], if `labels_scale` is True, scale the labels to [0, 1].
-                        Defaults to False.
-
+        :param data: The dataset to preprocess.
+        :param label_encoder: The label encoder to standardize the author labels.
+    Returns:
+        dataframe for the AA task.
     """
     # scale labels
     if label_encoder is None:
@@ -196,15 +191,15 @@ def preprocess_for_task(data: pandas.DataFrame, task: str, sampling_size: Union[
     """
     Preprocess the given `data` for the given `task`.
     Args:
-        data: The dataset to preprocess.
-        task: The task to solve.
-        sampling_size: Number (if integer) or percentage (if float) of positive samples for adaptation to AV tasks.
+        :param data: The dataset to preprocess.
+        :param task: The task to solve.
+        :param sampling_size: Number (if integer) or percentage (if float) of positive samples for adaptation to AV tasks.
                         Defaults to 1.0 (use all samples).
-        negative_sampling_size: Number (if integer) or percentage (if float) of negative samples for adaptation to
+        :param negative_sampling_size: Number (if integer) or percentage (if float) of negative samples for adaptation to
                                 AV tasks. If percentage, the percentage is computed according to `sampling_size`.
                                 To use all samples, set to -1. Defaults to 1.0 (use as many negative samples as
                                 positive ones).
-        seed: Sampling seed. Defaults to 42.
+        :param seed: Sampling seed. Defaults to 42.
 
     Returns:
         A copy of `data` preprocessed according to `task`.
@@ -229,13 +224,14 @@ def preprocess_for_task(data: pandas.DataFrame, task: str, sampling_size: Union[
         return train_df.reset_index(), test_df.reset_index(), label_encoder
 
 
-def n_grams(dataframe: pandas.DataFrame, ngrams: int = 3, task: str = "sav", vectorizer=None, max_len=None):
+def n_grams(dataframe: pandas.DataFrame, ngrams: int = 3, task: str = "sav", vectorizer=None):
     """
     Extract n-gram features from the given `dataframe`.
     Args:
-        dataframe: The dataframe. Texts are assumed to be in a "text_A" column or in a "text_A, text_B" column pair.
-        ngrams: n-grams to consider. Defaults to 3.
-        task: Task: one of "sav", "av", or "aa".
+        :param dataframe: The dataframe. Texts are assumed to be in a "text_A" column or in a "text_A, text_B" column pair.
+        :param ngrams: n-grams to consider. Defaults to 3.
+        :param task: Task: one of "sav", "av", or "aa".
+        :param vectorizer: the vectorizer to employ, if available.
     Returns:
         A triple: a numpy.ndarray encoding n-gram statistics and the appropriate additional info for the task,
                 the labels, and the n_gram vectorizer.
@@ -261,7 +257,4 @@ def n_grams(dataframe: pandas.DataFrame, ngrams: int = 3, task: str = "sav", vec
             vectorizer.fit(texts)
         logging.debug("\t\tApplying vectorizer...")
         data = vectorizer.transform(texts).toarray()
-    return data, vectorizer, max_len
-
-
-
+    return data, vectorizer

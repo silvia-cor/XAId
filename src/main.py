@@ -6,7 +6,6 @@ import os
 from typing import Optional
 import random
 import numpy
-import pandas
 
 import fire
 from datetime import datetime
@@ -19,7 +18,6 @@ from xai.feature_importance import irof, local_explanation
 from xai.records import counter_factual_examples
 from xai.probing import probe
 import torch
-from helpers import pickled_resource
 
 __CW = os.path.dirname(os.path.abspath(__file__)) + "/"
 __DATA_FOLDER = __CW + "../data/"
@@ -37,22 +35,27 @@ def run(dataset: str, algorithm: str, task: str,
     """
     Train a model with the given `algorithm` to perform `task` on the given `dataset`.
     Args:
-        dataset: The dataset, currently only "medlatin" is supported.
-        algorithm: One of "svm", "lr".
-        task: One of "sav" (Same-Author Verification), "av" (Authorship Verification), and "aa" (Authorship Attribution).
-        positive_sampling_size: Number (if integer) or percentage (if float) of positive samples for adaptation to AV tasks.
+        :param dataset: The dataset, currently only "medlatin" is supported.
+        :param algorithm: The algorithm for the model, currently "svm", "lr" and "transformer" are supported.
+        :param task: The task for the model; one of "sav" (Same-Author Verification), "av" (Authorship Verification), and "aa" (Authorship Attribution).
+        :param positive_sampling_size: Number (if integer) or percentage (if float) of positive samples for adaptation to AV tasks.
                         Defaults to 1.0 (use all samples).
-        negative_sampling_size: Number (if integer) or percentage (if float) of negative samples for adaptation to
+        :param negative_sampling_size: Number (if integer) or percentage (if float) of negative samples for adaptation to
                                 AV tasks. If percentage, the percentage is computed according to `sampling_size`.
                                 To use all samples, set to -1. Defaults to 1.0 (use as many negative samples as
                                 positive ones).
-        char_n_grams: Character n-grams for model training. Defaults to 3.
-        hyperparameters: Path to additional hyperparameters, to be stored in a json file.
-        output: Output file for configuration. The script generates a `output.cfg` (holding run configuration), a
-                `output.pickle` holding the trained model, and a `output.results.json` holding validation results.
-        seed: Random seed for the experiments. Defaults to 42.
-        n_jobs: Parallelism degree, defaults to 1. Use -1 to use all available resources.
-        logging_level: Logging level, defaults to "info".
+        :param char_n_grams: Value for character n-grams for model training. Defaults to 3.
+        :param hyperparameters: Path to additional hyperparameters, to be stored in a json file.
+        :param output: Output file for configuration. The script generates the following files: `output.config.json` (holding run configuration),
+                `output.parameters.json` (holding the parameters and hyperparameters of the trained model),
+                `output.pickle` (holding the trained model), and a `output.validation.json` (holding validation results).
+        :param probe_type: Type of probe for the probing experiment.
+        :param k: Number of probes to create for the probing experiment.
+        :param min_length: Minimum chain length for "pos" probes for the probing experiment.
+        :param max_length: Maximum chain length for "pos" probes for the probing experiment.
+        :param seed: Random seed for the experiments. Defaults to 42.
+        :param n_jobs: Parallelism degree, defaults to 1. Use -1 to use all available resources.
+        :param logging_level: Logging level, defaults to "info".
     """
 
     if dataset != "medlatin":
@@ -111,6 +114,7 @@ def run(dataset: str, algorithm: str, task: str,
     random.seed(seed)
     numpy.random.seed(seed)
     logging.debug(f"Creating dataset...")
+    # the only dataset currently supported is MedLatin
     data = create_MedLatin(__DATA_FOLDER + 'MedLatin')
 
     logging.debug(f"Preparing for task...")
@@ -128,19 +132,19 @@ def run(dataset: str, algorithm: str, task: str,
         logging.debug(f"\tTrained model found!")
         if algorithm != 'transformer':
             with open(output + ".pickle", "rb") as f:
-                model, vectorizer, selector, max_len = pickle.load(f)
+                model, vectorizer, selector = pickle.load(f)
         else:
             num_labels = len(numpy.unique(train_df.label.values)) if task == "aa" else 2
             model = Transformer(state_dict=output + ".state_dict.pt", num_labels=num_labels)
     else:
         if algorithm != 'transformer':
-            model, optimal_hyperparameters, vectorizer, selector, max_len = \
+            model, optimal_hyperparameters, vectorizer, selector = \
                 train(train_df, algorithm, task, char_n_grams, hyperparameters=hyperparameters, seed=seed,
                       n_jobs=n_jobs)
-            with open(output + ".hyperparameters.json", "w") as log:
+            with open(output + ".parameters.json", "w") as log:
                 json.dump(optimal_hyperparameters, log)
             with open(output + ".pickle", "wb") as log:
-                pickle.dump((model, vectorizer, selector, max_len), log)
+                pickle.dump((model, vectorizer, selector), log)
         else:
             model = train(train_df, algorithm, task, seed=seed)
             torch.save(model.model.state_dict(), output + ".state_dict.pt")
@@ -152,7 +156,7 @@ def run(dataset: str, algorithm: str, task: str,
     if algorithm == 'transformer':
         test_data = test_df
     else:
-        test_data, _, _ = n_grams(test_df, char_n_grams, task, vectorizer, max_len)
+        test_data, _ = n_grams(test_df, char_n_grams, task, vectorizer)
         test_data = selector.transform(test_data)
     validation = validate(model, test_data, test_df.label.values, algorithm, task)
 
@@ -170,7 +174,7 @@ def run(dataset: str, algorithm: str, task: str,
     ################
 
     if task == 'sav' and algorithm == 'svm':
-        train_data, _, _ = n_grams(train_df, char_n_grams, task, vectorizer, max_len)
+        train_data, _ = n_grams(train_df, char_n_grams, task, vectorizer)
         logging.info("Performing XAI: feature importance...")
         # IROF
         irof(model, vectorizer, selector, test_data, test_df.label.values, algorithm, task, seed, output)
@@ -187,7 +191,7 @@ def run(dataset: str, algorithm: str, task: str,
         if algorithm == 'svm':
             counter_factual_examples(model, train_df, test_df, test_data, test_df.label.values, algorithm, task, seed,
                                      output, n_factuals=3, char_n_grams=char_n_grams,
-                                     vectorizer=vectorizer, max_len=max_len, selector=selector)
+                                     vectorizer=vectorizer, selector=selector)
         else:
             counter_factual_examples(model, train_df, test_df, test_data, test_df.label.values, algorithm, task, seed,
                                      output, n_factuals=3)

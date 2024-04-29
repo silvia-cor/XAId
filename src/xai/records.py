@@ -115,16 +115,11 @@ def counter_factual_examples(model, train_df, test_df, test_data, test_labels, a
                              n_factuals=1, **kwargs):
     random.seed(seed)
     train_labels = train_df.label.values
-    train_texts = train_df.text.values if task != 'sav' else \
-        [(row['text_A'], row['text_B']) for _, row in train_df.iterrows()]
     test_sample_index = random.choice(range(len(test_labels)))
-    test_text_sample = test_df.at[test_sample_index, 'text'] if task != 'sav' else \
-        (test_df.at[test_sample_index, 'text_A'], test_df.at[test_sample_index, 'text_B'])
-
     if algorithm != 'transformer':
         pred = model.predict([test_data[test_sample_index]])
         logging.info("\tExtracting features...")
-        train_data, _, _ = n_grams(train_df, kwargs['char_n_grams'], task, kwargs['vectorizer'], kwargs['max_len'])
+        train_data, _ = n_grams(train_df, kwargs['char_n_grams'], task, kwargs['vectorizer'])
         train_data = kwargs['selector'].transform(train_data)
         test_data = test_data[test_sample_index]
     else:
@@ -145,9 +140,27 @@ def counter_factual_examples(model, train_df, test_df, test_data, test_labels, a
                                                                 key=lambda i: i[1])][:n_factuals]
     min_counterfactual_distances_indexes = [dist[0] for dist in sorted(enumerate(counterfactual_distances),
                                                                        key=lambda i: i[1])][:n_factuals]
-    json_file = {'text_sample': test_text_sample,
-                 'factuals': [(train_texts[idx], factual_distances[idx]) for idx in min_factual_distances_indexes],
-                 'counterfactuals': [(train_texts[idx], counterfactual_distances[idx]) for idx
+    json_file = {'text_sample': test_df.iloc[test_sample_index].to_json(),
+                 'factuals': [(train_df.iloc[idx].to_json(), factual_distances[idx]) for idx in min_factual_distances_indexes],
+                 'counterfactuals': [(train_df.iloc[idx].to_json(), counterfactual_distances[idx]) for idx
                                      in min_counterfactual_distances_indexes]}
     with open(output + '_factuals.json', 'w') as f:
         json.dump(json_file, f)
+    if algorithm != 'transformer':
+        factual_idx = min_factual_distances_indexes[0]
+        counterfactual_idx = min_counterfactual_distances_indexes[0]
+        nonzero_test = numpy.nonzero(test_data)[0]
+        nonzero_factual = numpy.nonzero(train_data[factual_idx])[0]
+        nonzero_counterfactual = numpy.nonzero(train_data[counterfactual_idx])[0]
+        select_feat_idx = kwargs['selector'].get_support(indices=True)
+        feat_names = kwargs['vectorizer'].get_feature_names_out()[select_feat_idx]
+        logging.debug('Most similar features for first factual:')
+        nonzero = list(set(nonzero_test).intersection(nonzero_factual))
+        differences = numpy.array([abs(value - train_data[factual_idx][i]) if i in nonzero
+                                   else float("inf") for i, value in enumerate(test_data)])
+        print(feat_names[numpy.argpartition(differences, 10)[:10]])
+        logging.debug('Most similar features for first counterfactual:')
+        nonzero = list(set(nonzero_test).intersection(nonzero_counterfactual))
+        differences = numpy.array([abs(value - train_data[counterfactual_idx][i]) if i in nonzero
+                                   else float("inf") for i, value in enumerate(test_data)])
+        print(feat_names[numpy.argpartition(differences, 10)[:10]])

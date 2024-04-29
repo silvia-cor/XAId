@@ -2,14 +2,15 @@ import numpy
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
 
-def validate(model, test_data, test_labels, algorithm, task):
+def validate(model, test_data, test_labels, algorithm: str, task: str):
     """
     Validate the given `model` against the given `data`.
     Args:
-        model: The model to validate.
-        data: The data to validate the model on.
-        labels: The labels to validate the model on.
-
+        :param model: The model to validate.
+        :param test_data : The data to validate the model on.
+        :param test_labels : The labels to validate the model on.
+        :param algorithm : The algorithm the model is based on.
+        :param task : The task the model is trained for.
     Returns:
         A dictionary holding several validation metrics.
     """

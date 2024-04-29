@@ -6,13 +6,14 @@ import numpy
 import pandas
 import random
 import torch.cuda
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, RobertaConfig
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence
 
 
 class Transformer:
-    def __init__(self, model: str = "pstroe/roberta-base-latin-cased3", state_dict=None, num_labels=2, seed=42):
+    def __init__(self, model: str = "pstroe/roberta-base-latin-cased3", state_dict: str = None, num_labels: int = 2,
+                 seed: int = 42):
         # for reproducibility
         torch.backends.cudnn.deterministic = True
         random.seed(seed)
@@ -96,7 +97,8 @@ class AuthorshipDataset(Dataset):
 
 
 class AuthorshipDataloader:
-    def __init__(self, data: pandas.DataFrame, task: str, tokenizer: AutoTokenizer, batch_size: int, shuffle=False):
+    def __init__(self, data: pandas.DataFrame, task: str, tokenizer: AutoTokenizer, batch_size: int,
+                 shuffle: bool = False):
         self.task_data = [(data.text_A.values[i], data.text_B.values[i]) for i in range(len(data.text_A.values))] \
             if task == 'sav' else data.text.values
         self.labels = data.label.values

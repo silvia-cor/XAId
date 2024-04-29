@@ -1,4 +1,3 @@
-import itertools
 from typing import Tuple, Union
 
 import numpy

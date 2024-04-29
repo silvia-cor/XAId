@@ -3,24 +3,14 @@ from __future__ import annotations
 import json
 import logging
 import os
-import pickle
 import sys
-import random
-from datetime import datetime
-from typing import Optional, Tuple, Dict
 
 import numpy
-import pandas
-import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-from sklearn.feature_selection import SelectKBest
-from sklearn.feature_selection import f_classif, chi2
+from sklearn.feature_selection import SelectKBest, chi2
 
 from models.linear import LinearSVMTrainer, LogisticRegressorTrainer
-from models.preprocessing import n_grams, preprocess_for_task
-from models.transformer import Transformer, AuthorshipDataloader
-from validation import validate
-from xai.feature_importance import irof
+from models.preprocessing import n_grams
+from models.transformer import Transformer
 
 __CW = os.path.dirname(os.path.abspath(__file__)) + "/"
 __DATA_FOLDER = __CW + "../data/"
@@ -34,16 +24,16 @@ def train(train_df, algorithm: str, task: str, chr_n_grams: int = 3, hyperparame
     """
     Train a model with the given `algorithm` to perform `task` on the given `dataset`.
     Args:
-        dataset: The dataset, currently only "victoria" is supported.
-        algorithm: One of "svm", "lr".
-        task: One of "sav" (Same-Author Verification), "av" (Authorship Verification), and "aa" (Authorship Attribution)
-        chr_n_grams: Character n-grams for model training. Defaults to 3.
-        hyperparameters: Hyperparameter distributions for the model selection.
-        seed: Random seed for the experiments. Defaults to 42.
-        n_jobs: Parallelism degree, defaults to 1. Use -1 to use all available resources.
+        :param train_df: The training dataframe.
+        :param algorithm: The algorithm for the model.
+        :param task: The task to train the model on.
+        :param chr_n_grams: Value for character n-grams for model training; defaults to 3.
+        :param hyperparameters: Hyperparameter distributions for the model selection.
+        :param seed: Random seed for the experiments; defaults to 42.
+        :param n_jobs: Parallelism degree, defaults to 1. Use -1 to use all available resources.
 
     Returns:
-        A triple (model, optimal hyperparameters, validation dictionary).
+        The trained model.
     """
 
     if hyperparameters is not None:
@@ -59,7 +49,7 @@ def train(train_df, algorithm: str, task: str, chr_n_grams: int = 3, hyperparame
     if algorithm != 'transformer':
         logging.debug(f"Creating {chr_n_grams}-grams.")
         train_labels = train_df.label.values
-        train_data, vectorizer, max_len = n_grams(train_df, ngrams=chr_n_grams, task=task)
+        train_data, vectorizer = n_grams(train_df, ngrams=chr_n_grams, task=task)
         logging.debug(f"\tFeature selection on n_grams...")
         selector = SelectKBest(chi2, k=1000).fit(train_data, train_labels)
         train_data = selector.transform(train_data)
@@ -71,7 +61,7 @@ def train(train_df, algorithm: str, task: str, chr_n_grams: int = 3, hyperparame
             trainer = LinearSVMTrainer(seed, n_jobs)
         model, optimal_hyperparameters = trainer.fit(train_data, train_labels, hyperparameters_distributions)
         logging.debug(f"Model fit.")
-        return model, optimal_hyperparameters, vectorizer, selector, max_len
+        return model, optimal_hyperparameters, vectorizer, selector
     else:
         logging.debug(f"Fitting Transformer...")
         num_labels = len(numpy.unique(train_df.label.values)) if task == "aa" else 2

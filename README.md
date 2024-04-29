@@ -1,67 +1,60 @@
+# eXplainable Authorship Identification
+
+## Abstract
+**Authorship Identification (AId)** has three main tasks: 
+
+- **Same-Authorship Verification (SAV)**: (binary) given two documents, do they share the same author?
+- **Authorship Verification (AV)**: (binary) given a document and a candidate author, is the candidate the real author of the document?
+- **Authorship Attribution (AA)**: (multiclass) given a document and a set of candidate authors, what candidate is the real author of the document?
+
+While many efforts in Authorship Identification have focused on testing the accuracy of different learning algorithms, or on proposing new sets of features that these algorithms could exploit, or simply on applying known techniques to various case studies, little or no effort has been devoted to endowing these systems with the ability to generate explanations for their predictions.
+
+This fact represents indeed a very important gap in the literature, and a hindrance to a more widespread adoption of these technologies: the ability to provide justifications for their own predictions is a very important property for machine-learned systems in general, and even more so when these systems are involved in significant decisions-making processes, such as deciding on the authorship of written documents, with all its legal and ethical implications.
+
+On one hand, a domain expert who has devoted a sizeable intellectual effort to determining the authorship of a given document is unlikely to blindly trust the prediction of an automatic system, unless the possibility to examine the reasons of its prediction and/or the inner working of the system is provided. On the other hand, the knowledge regarding the process of an authorship system might inspire the domain expert with new possible working hypotheses that had not been considered before.
+
+In this project, we carry out an in-depth analysis of the suitability of a set of well-known general-purpose XAI methods to the three main AId tasks. In particular, we explore the following XAI methods:
+
+- **feature ranking** for SAV
+- **transformer probing** for AA
+- **factuals / counterfactuals selection** for AV.
+
+Note that each XAI method can be easily applied to any other AId task. In the code, each task prompts the specific XAI method just as an example.
+## The dataset
+In this project, we employ one dataset named "MedLatin" (it can be downloaded [here](https://doi.org/10.5281/zenodo.4298503)).
+
+We select only 5 authors from the whole dataset, and divide the resulting dataset into the training set (90%) and test set (10%).
+
+
+## The learning methods
+As a 'classic' Machine Learning method, we experiment with Support Vector Machine. We fine-tune the hyper-parameters via 3-fold cross-validation.
+
+We also experiment with a RoBERTa-based transformer pre-trained for Latin tasks (see [here](https://huggingface.co/pstroe/roberta-base-latin-cased3)). We fine-tune the model for 5 epochs.
+
+
+### Code 
+The code is organized as follows in the `src` directory:
+
+- `main.py`
+- `xai`: directory with the code for the XAI methods (feature ranking: `feature_importance.py`, transformer probing: `probing.py`, factuals/counterfactual selection: `records.py`).
+- `models`: directory with the code for the preprocessing of the dataset and for the creation of the task pairs (`preprocessing.py`), and for the two models we adopt (`linear.py` and `transformer`).
+- `helpers.py`: various functions potentially useful for multiple projects.
+- `train.py`: training process for the AId methods.
+- `validation.py`: evaluation process for the AId methods.
+
+### References
+
+Mattia Setzu, Silvia Corbara, Anna Monreale, Alejandro Moreo, and Fabrizio Sebastiani. 2024. Explainable Authorship Identification in Cultural Heritage Applications. J. Comput. Cult. Herit. https://doi.org/10.1145/3654675
+
 # Quickstart
 ## Installation
 ```shell
 mkvirtualenv -p python3.9 xaid
 pip install -r requirements.txt
-cd data/dataset/
-# download Victoria dataset
-wget "https://dataworks.iupui.edu/bitstream/handle/11243/23/Gungor_2018_VictorianAuthorAttribution_data-train.csv"
-cd ../../
-python -m spacy download en_core_web_sm
 ```
-
+Remember to download the dataset, and to update the dataset folder in the variable __DATASET_FOLDER in `main.py` if needed.
 ## Run
-You can train the model both through command line and python interface.
-
-**Command Line**
-```shell
-python cli.py --dataset victoria\
-                    --algorithm lr\
-                    --task sav\
-                    --nr_authors 3\
-                    --output output_run\
-                    --positive_sampling_size 2500\
-                    --negative_sampling_size 1.0\
-                    --logging_level debug
-                    --n_jobs -1
+Example to run the AV experiment, using the SVM method.
 ```
-where `--dataset` selects the dataset to use,
-`--lr` selects the algorithm to use (in this case Logistic Regression),
-`--task` selects the task (one of Same-Author Verification (sav), Authorship Attribution (aa) or Authorship Verification (av)),
-`--output` is used to name the output files,
-`--positive_sampling_size` and `--negative_sampling_size` are used to regulate the positive/negative sampling per author.
- 
-**Python**
-
-```python
-from run import train
-
-model, hyperparameters, validation = train("victoria", "lr", "sav", output="output_run", n_jobs=-1)
-```
-Both runs train the desired model and output several files: one for the trained model (`output.pickle`), one for the model's hyperparameters (`output.model.json`), one for the model's validation (`output.validation.json`), and one for the overall run configuration (`output.json`). 
-For an in-depth review of each parameter run `help(train)`:
-```python
-train(dataset: 'str', algorithm: 'str', task: 'str', nr_authors: 'int' = 10, sampling_size: 'int | float' = 1.0, negative_sampling_size: 'int | float' = 1.0, chr_n_grams: 'int' = 3, hyperparameters: 'Optional[dict]' = None, output: 'Optional[str]' = None, seed: 'int' = 42, n_jobs: 'int' = 1, logging_level: 'str' = 'info') -> 'Tuple[object, dict, dict]'
-    Train a model with the given `algorithm` to perform `task` on the given `dataset`.
-    Args:
-        dataset: The dataset, currently only "victoria" is supported.
-        algorithm: One of "svm", "lr".
-        task: One of "sav" (Same-Author Verification), "av" (Authorship Verification), and "aa" (Authorship Attribution)
-        nr_authors: Number of authors to randomly select. Applies to AA tasks.
-        sampling_size: Number (if integer) or percentage (if float) of positive samples for adaptation to AV tasks.
-                        Defaults to 1.0 (use all samples).
-        negative_sampling_size: Number (if integer) or percentage (if float) of negative samples for adaptation to
-                                AV tasks. If percentage, the percentage is computed according to `sampling_size`.
-                                To use all samples, set to -1. Defaults to 1.0 (use as many negative samples as
-                                positive ones).
-        chr_n_grams: Character n-grams for model training. Defaults to 3.
-        hyperparameters: Hyperparameter distributions for the model selection.
-        output: Output file for configuration. The script generates a `output.cfg` (holding run configuration), a
-                `output.pickle` holding the trained model, and a `output.results.json` holding validation results.
-        seed: Random seed for the experiments. Defaults to 42.
-        n_jobs: Parallelism degree, defaults to 1. Use -1 to use all available resources.
-        logging_level: Logging level, defaults to "info".
-    
-    Returns:
-        A triple (model, optimal hyperparameters, validation dictionary).
+python main.py run --dataset medlatin --algorithm svm --task av --positive_sampling_size 5000 --output "../output/svm_av" --logging_level debug --n_jobs 8
 ```

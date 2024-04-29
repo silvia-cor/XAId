@@ -30,9 +30,9 @@ class LogisticRegressorTrainer(LinearTrainer):
         """
         Train a logistic regressor.
         Args:
-            data: Training data.
-            labels: Training labels.
-            hyperparameters: Hyperparameters dictionary for the logistic regressor.
+            :param data: Training data.
+            :param labels: Training labels.
+            :param hyperparameters: Hyperparameters dictionary for the logistic regressor.
         Returns:
             A trained Logistic Regressor, its parameters, and an evaluation dictionary
         """
@@ -71,9 +71,9 @@ class LinearSVMTrainer(LinearTrainer):
         """
         Train a linear SVM.
         Args:
-            data: Training data.
-            labels: Training labels.
-            hyperparameters: Hyperparameters dictionary for the logistic regressor.
+            :param data: Training data.
+            :param labels: Training labels.
+            :param hyperparameters: Hyperparameters dictionary for the logistic regressor.
         Returns:
             A trained Linear SVM and its parameters.
         """
